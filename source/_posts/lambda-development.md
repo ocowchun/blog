@@ -249,6 +249,7 @@ module.exports = {
 ```
 
 ### 4. 新增 `lib/github.js`
+這邊就只是使用 `reqest` 取得 `https://status.github.com/api/status.json` 的內容。
 
 ```js
 let request = require('request');
@@ -268,6 +269,7 @@ export function getStatus() {
 ```
 
 ### 5. 新增 `function/github_status/index.js`
+呼叫 `getStatus` 成功時回傳結果，失敗時回傳錯誤內容，執行 Lambda 時， `cb` 的第一個參數如果不是 `null` 就會視為執行失敗，反之則為執行成功，更多細節請看[Using the Callback Parameter](http://docs.aws.amazon.com/lambda/latest/dg/nodejs-prog-model-handler.html#nodejs-prog-model-handler-callback)
 
 ```js
 import {getStatus} from '../../lib/github';
@@ -277,11 +279,24 @@ exports.handle = function(e, ctx, cb) {
 }
 ```
 
-### 6. 部署
-就完成一個新的 function 叫做
-apex 使用 資料夾作為 function name
-然後我們一樣在 terminal 執行 `apex deploy` 來部署我們的新 function
-最後執行 `apex invoke github_status` 就可以看到這個 function 的執行結果。
+### 6. 新增 `.babelrc`
+babel 的相關設定
+
+```
+{
+  "presets": ["es2015", "stage-0"],
+  "plugins": ["transform-runtime", "transform-regenerator", "syntax-async-functions", "transform-async-to-generator"]
+}
+
+```
+
+### 7. 部署
+我們現在已經完成一個新的 function 叫做 `github_status` ，然後我們一樣在 terminal 執行 `apex deploy` 來部署我們的新 function，最後執行 `apex invoke github_status` 就可以看到這個 function 的執行結果。
+
+```bash
+apex invoke github_status
+#"{\"status\":\"good\",\"last_updated\":\"2016-05-28T13:57:18Z\"}"
+```
 
 ## 結論
 在這邊我們簡單敘述了如何建立使用 apex 來開發 AWS Lambda ，撇除一開始的麻煩設定，接下來當你需要建立新的 function 的時候，你只需要在 `functions` 下建立對應的 `function_name` 資料夾，完成你的程式碼，然後執行 `apex deploy` 就可以了。
