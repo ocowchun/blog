@@ -28,6 +28,7 @@ Apex 主要是使用 Golang 開發，開發者包含知名的 TJ 大大。
 ----
 
 ## 開始你的第一個 lambda function
+這邊是程式碼的[範例](https://github.com/ocowchun/lambda101)
 
 ### [安裝 apex](https://github.com/apex/apex#installation)
 如果你的電腦室 OS X, Linux, 或是 OpenBSD:
@@ -286,3 +287,11 @@ apex 使用 資料夾作為 function name
 在這邊我們簡單敘述了如何建立使用 apex 來開發 AWS Lambda ，撇除一開始的麻煩設定，接下來當你需要建立新的 function 的時候，你只需要在 `functions` 下建立對應的 `function_name` 資料夾，完成你的程式碼，然後執行 `apex deploy` 就可以了。
 
 我覺得 Apex 搭配 AWS Lambda 是一個可以讓你真正專注在開發程式，而不需要花費心力去管理系統營運的開發方式，當然他也有許許多多麻煩的地方，我會在之後跟大家分享。
+
+
+## References
+* [AWS Lambda  Developer Guide](http://docs.aws.amazon.com/lambda/latest/dg/welcome.html)
+* [Apex](https://github.com/apex/apex)
+* [Terraform](https://www.terraform.io/docs/providers/aws/index.html)
+* [淺析 serverless 架構與實作](http://abalone0204.github.io/2016/05/22/serverless-simple-crud/)
+* [AWS Lambda notes](https://vinta.ws/code/aws-lambda-notes.html)
