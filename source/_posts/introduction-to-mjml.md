@@ -1,8 +1,10 @@
 ---
 title: Introduction To MJML
 tags:
-- MJML  
+  - MJML
+date: 2016-06-15 21:02:31
 ---
+
 
 使用 html 寫 email 時，一定都遇過以下這些問題
 
