@@ -42,6 +42,17 @@ theme: again
 ```
 
 
+## [路徑設定](https://hexo.io/docs/configuration.html#URL)
+根據部落格的網址來設置根目錄(root)，不然會讀取不到靜態資源。
+
+一般的網址都是根目錄(i.e. `https://blog.example.com`)，所以 `root` 就設定為 `/`。如果你的部落格是放在子目錄(例如本部落格)，那就要設定對應的 `root` ，以本部落格為例，首頁是 `www.ocowchun.com/blog` ，所以 `root` 要設定為 `/blog/`。
+
+```yml
+url: http://www.ocowchun.com/blog
+root: /blog/
+```
+
+
 ## 部署到 github pages
 > 我目前是將 source code 放在 `master` branch，然後另外開 `gh-pages` ，來放置 public 的檔案。
 
