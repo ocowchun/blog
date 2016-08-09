@@ -75,7 +75,16 @@ Elasticsearch 原本支援的搜尋條件都會放在這裡，比如說你希望
 ####max_boost
 
 ####score_mode
+用來決定fucntions的scores要如何彙總,預設是將所有function_score相乘，
+不過使用乘法會有下面這些問題:
+
+- 當有一項 function score 為0時，結果就會是0
+- 不容易調整 function 之間的權重(比如我希望 function a 佔30%,function b 佔 20%)
+- 容易因為一項 function_score 的極大或極小,導致分數有很大的變化
+
+上述提的問題，有部分可以透過 function 裡面的 factor來解決，不過有些沒辦法。
+所以 score_mode 我通常會使用 sum，當然 sum 一樣會有 `容易因為一項 function_score 的極大或極小,導致分數有很大的變化` ，不過我們可以透過 factor 來減少這樣的影響。
 
 ####boost_mode
-
+用來決定如何彙總 function_score與 query_score，預設是相乘，只要是相乘，就會有我剛才提到的問題，所以我通常也都會改為使用 sum
 ####min_score
