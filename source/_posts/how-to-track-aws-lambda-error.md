@@ -4,7 +4,9 @@ tags:
   - Lambda
   - Rollbar
   - SNS
+date: 2016-08-13 11:04:40
 ---
+
 
 [AWS Lambda](https://aws.amazon.com/tw/lambda/)是個很方便的東西，可以免去管理機器的成本，又只需要按照使用的次數付費，不過 Lambda 目前在管理上還有很多麻煩的地方，比如說檢視使用數據(觸發次數、執行時間、成功/失敗數)，錯誤訊息的追蹤。
 
