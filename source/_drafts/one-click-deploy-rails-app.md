@@ -39,3 +39,41 @@ Sudo 的網站是使用 [Ruby on Rails](http://rubyonrails.org/) 開發的，目
 在 Sudo 我們主要是使用 Chef 去建置環境，建置完成之後需要打包環境方便之後使用，除了各家雲端服務內建的打包服務外，你可以透過 [Packer](https://www.packer.io/) 來完成這項工作， Packer 可以將你的環境根據設定打包成對應的 Image ，支援 Amazon EC2, DigitalOcean, Google Compute Engine, Microsoft Azure, etc
 
 詳細的內容可以參考我們家 Steam 勸敗一哥 Henry 的文章 [Kitchen 與 Packer 實戰](https://henry40408-blog.herokuapp.com/kitchen-and-packer/)
+
+
+## 動態更新組態檔案
+接下來是談動態更新組態檔案，在我們的應用程式裡面會有許多的設定
+比如 Facebook App ID, Database URL, 
+
+我們會這些設定抽出來 啟動 Image 的時候再注入
+這樣的好處是可以方便地變動，不需要因為 設定改變重新打包 Image
+同時也可以讓不同 Stage 的 Application 不需要特別去打包
+更進一步的是當 這些參數變動的時候，自動去更新到相關的機器，然後重啟對應的服務。
+
+[Consul](https://www.consul.io) 是一個很方便的工具，
+可以用來作 Health Check, Service Discovery, Key Value Store
+
+[Consul Template](https://github.com/hashicorp/consul-template)，當 Consul Key Value 變動的時候，
+會去調整對應的 template 產生新的 config ，然後重啟相關的服務。
+
+
+## Blue Green Deployment
+
+### Reference: Using a Blue-Green Deployment Strategy in AWS
+http://docs.aws.amazon.com/opsworks/latest/userguide/best-deploy.html#best-deploy-environments-blue-green
+
+雖然裡面用的是 opsWork 不過許多概念都相通
+
+比較不一樣的是他有兩組 elb
+
+然後透過設定 route 53 權重將流量導向指定的 ELB
+
+我們目前的做法是將 ASG2 註冊到 ELB 然後把 ASG1 移掉，不過這樣的做法會有個問題在於 ASG2裡面的 instance 也需要通過 ELB的health check,ELB 才會開始將流量導向 instance，使用 route 53 搭配 ELB group 的話就不用考慮這個問題，或許我們也可以用這樣的方式。
+
+---- 
+
+### 很棒的投影片，分享了從不同 level 去執行 blue green deployment 的優缺點
+http://www.slideshare.net/AmazonWebServices/dvo401-deep-dive-into-bluegreen-deployments-on-aws
+
+https://d0.awsstatic.com/whitepapers/AWS_Blue_Green_Deployments.pdf
+
