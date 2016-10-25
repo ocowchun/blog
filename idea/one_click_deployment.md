@@ -44,3 +44,19 @@ http://docs.aws.amazon.com/opsworks/latest/userguide/best-deploy.html#best-deplo
 http://www.slideshare.net/AmazonWebServices/dvo401-deep-dive-into-bluegreen-deployments-on-aws
 
 https://d0.awsstatic.com/whitepapers/AWS_Blue_Green_Deployments.pdf
+
+
+
+## consul event
+
+可以用來協助執行一些例行工作，比如說 rails 的 db:migrate
+觸發一個 `db_migrate` 的 event，並且指定 node
+
+然後再 consul client 設定好對應的 handler
+要注意的是， consul 目前只要重新讀取，就會執行全部 watch 的事件，官方似乎將這樣的行為當作一種 feature (!?)
+可以透過 [sifter](https://github.com/darron/sifter)
+
+
+
+
+
