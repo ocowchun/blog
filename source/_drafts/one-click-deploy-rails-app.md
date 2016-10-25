@@ -42,13 +42,13 @@ Sudo 的網站是使用 [Ruby on Rails](http://rubyonrails.org/) 開發的，目
 
 
 ## 動態更新組態檔案
-接下來是談動態更新組態檔案，在我們的應用程式裡面會有許多的設定
-比如 Facebook App ID, Database URL, 
+接下來是談動態更新組態檔案，在我們的應用程式裡面會有許多的設定比如 Facebook App ID, Database URL, etc 機器本身也會有需多的設定，例如第三方服務的 URL, License, etc [12-Factor App](https://12factor.net/config)提到不要將 config 寫死在 code 裡面，亦或是寫死在機器裡面。
 
-我們會這些設定抽出來 啟動 Image 的時候再注入
-這樣的好處是可以方便地變動，不需要因為 設定改變重新打包 Image
-同時也可以讓不同 Stage 的 Application 不需要特別去打包
-更進一步的是當 這些參數變動的時候，自動去更新到相關的機器，然後重啟對應的服務。
+將組態設定抽離出來，啟動 Image 的時再注入可以帶來許多的好處:
+
+1. 不需要因為組態設定改變重新打包 Image
+2. 不同 Stage 的 Application 可以盡可能地共用同一個 Image
+3. 更進一步的是當組態設定變動後，自動去更新到相關的機器，然後重啟對應的服務。
 
 [Consul](https://www.consul.io) 是一個很方便的工具，
 可以用來作 Health Check, Service Discovery, Key Value Store
@@ -68,7 +68,7 @@ http://docs.aws.amazon.com/opsworks/latest/userguide/best-deploy.html#best-deplo
 
 然後透過設定 route 53 權重將流量導向指定的 ELB
 
-我們目前的做法是將 ASG2 註冊到 ELB 然後把 ASG1 移掉，不過這樣的做法會有個問題在於 ASG2裡面的 instance 也需要通過 ELB的health check,ELB 才會開始將流量導向 instance，使用 route 53 搭配 ELB group 的話就不用考慮這個問題，或許我們也可以用這樣的方式。
+我們目前的做法建立兩個 ASG(ASG1, ASG2)，將 ASG2 註冊到 ELB 然後把 ASG1 移掉，不過這樣的做法會有個問題在於 ASG2裡面的 instance 也需要通過 ELB 的health check, ELB 才會開始將流量導向 instance，使用 route 53 搭配 ELB group 的話就不用考慮這個問題，或許我們也可以用這樣的方式。
 
 ---- 
 
@@ -76,4 +76,3 @@ http://docs.aws.amazon.com/opsworks/latest/userguide/best-deploy.html#best-deplo
 http://www.slideshare.net/AmazonWebServices/dvo401-deep-dive-into-bluegreen-deployments-on-aws
 
 https://d0.awsstatic.com/whitepapers/AWS_Blue_Green_Deployments.pdf
-
