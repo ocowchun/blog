@@ -54,7 +54,7 @@ https://d0.awsstatic.com/whitepapers/AWS_Blue_Green_Deployments.pdf
 
 然後再 consul client 設定好對應的 handler
 要注意的是， consul 目前只要重新讀取，就會執行全部 watch 的事件，官方似乎將這樣的行為當作一種 feature (!?)
-可以透過 [sifter](https://github.com/darron/sifter)
+可以透過 [sifter](https://github.com/darron/sifter) 來避免不必要的執行。
 
 
 
