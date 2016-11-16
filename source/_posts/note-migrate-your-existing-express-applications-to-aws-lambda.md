@@ -9,31 +9,30 @@ tags:
 ---
 
 <iframe width="560" height="315" src="https://www.youtube.com/embed/Cuh_gtFX5gI" frameborder="0" allowfullscreen></iframe>
-[影片連結](https://www.youtube.com/watch?v=Cuh_gtFX5gI)
-介紹 API Gateway, Lambda
-講解怎麼把舊的服務 轉移到 API Gateway
-## 說明 API Gateway 的新功能
+
+本文是關於 [Migrate your Existing Express Applications to AWS Lambda]((https://www.youtube.com/watch?v=Cuh_gtFX5gI) 的筆記，影片內容在說明怎麼把 [Express](https://expressjs.com/) 專案整個搬移到 AWS Lambda 上。
+
+## API Gateway 的新功能
 * Catch-all resource paths
 * ANY http method
 * PROXY integrations
 
-#### Catch-all resource paths
+### Catch-all resource paths
 以往需要定義非常清楚的路徑，來說明要用哪個 fucntion 處理。不過這樣的缺點在於，`非常耗時`， catch all 可以讓我們可以用比較粗略的方式來設定 API Gateway 的路徑，所以可以快速完成建置，不過相對我們的文件與自動生成的 sdk 也會來得比較不嚴謹。
 Swagger 支援這個新功能
 
-#### ANY http method
+### ANY http method
 將所有的 method (GET, POST, PUT, …) 都對應到相同的 integration，好壞處跟前者差不多，兩個可以一起用，就只需要非常少數的 integration喔喔喔
 Swagger 也支援這個新功能
 
-#### PROXY integrations
+### PROXY integrations
 不再需要 input/output mappings !
 
 #### HTTP_PROXY
 這個我用不到，跳過了。
 
 #### AWS_PROXY
-根據 request 自動產生 event
-自動將內容轉換成 HTTP Response ， Lambda 輸出必須符合下面的格式
+當 request 進到 API Gateway後，會根據 request 自動產生 event，另外會將 Lambda 執行的結果轉換成 HTTP Response ， Lambda 輸出必須符合下面的格式
 
 ```javascript
 {
@@ -45,8 +44,7 @@ Swagger 也支援這個新功能
 
 如果 Lambda 輸出的格式不正確會回傳  `502 Bad Gateway`
 
-細節可以看這裡
-[Set Up a Proxy Resource with the Lambda Proxy Integration](http://docs.aws.amazon.com/apigateway/latest/developerguide/api-gateway-set-up-simple-proxy.html#api-gateway-set-up-lambda-proxy-integration-on-proxy-resource)
+細節可以看這裡 [Set Up a Proxy Resource with the Lambda Proxy Integration](http://docs.aws.amazon.com/apigateway/latest/developerguide/api-gateway-set-up-simple-proxy.html#api-gateway-set-up-lambda-proxy-integration-on-proxy-resource)
 Swagger 也支援這個新功能
 
 ### 官方支援 Express 的 package
@@ -56,7 +54,6 @@ Swagger 也支援這個新功能
 <blockquote class="imgur-embed-pub" lang="en" data-id="a/AJ5yz"><a href="//imgur.com/AJ5yz"></a></blockquote><script async src="//s.imgur.com/min/embed.js" charset="utf-8"></script>
 
 ## 如何 Migrate 現有的 Express App 到 AWS Lambda
-### 五個步驟
 1. 安裝相關的 dependencies (包含 aws-serverless-express)
 2. 建立一個 JavaScript wrapper
 3. 打包你的專案成 zip 
