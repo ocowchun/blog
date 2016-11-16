@@ -10,7 +10,7 @@ tags:
 
 <iframe width="560" height="315" src="https://www.youtube.com/embed/Cuh_gtFX5gI" frameborder="0" allowfullscreen></iframe>
 
-本文是關於 [Migrate your Existing Express Applications to AWS Lambda]((https://www.youtube.com/watch?v=Cuh_gtFX5gI) 的筆記，影片內容在說明怎麼把 [Express](https://expressjs.com/) 專案整個搬移到 AWS Lambda 上。
+本文是關於 [Migrate your Existing Express Applications to AWS Lambda](https://www.youtube.com/watch?v=Cuh_gtFX5gI) 的筆記，影片內容在說明怎麼把 [Express](https://expressjs.com/) 專案整個搬移到 AWS Lambda 上。
 
 ## API Gateway 的新功能
 * Catch-all resource paths
