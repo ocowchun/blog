@@ -6,6 +6,7 @@ tags:
   - Consul
   - AWS
   - Chef
+date: 2016-11-21 23:00:19
 ---
 
 本文主要是跟大家分享 [Sudo](https://sudo.com.tw/) 如何實作一鍵部署 Rails App 
