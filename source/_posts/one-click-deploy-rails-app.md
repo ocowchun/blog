@@ -60,7 +60,22 @@ Sudo 的網站是使用 [Ruby on Rails](http://rubyonrails.org/) 開發並架設
 做法就是在 Image 裡面包入 Consul, Consul Template 還有相關的設定，Instance 啟動時，會自動去尋找 Consul Server，找到之後 Consul Template 就會根據 Consul Key Value Store 去產生對應的 config ，當你需要變動設定檔的時候，你只需要在 Key Value Store 變動， Consul Template 就會自動產生新的設定重啟相關的服務，使用這樣的方式就可以簡單完成組態設定的相關操作。
 
 ## Deployment
-我們目前的做法建立兩個 ASG(ASG1, ASG2)，將 ASG2 註冊到 ELB 然後把 ASG1 移掉，不過這樣的做法會有個問題在於 ASG2 裡面的 instance 需要先通過 ELB 的 health check, ELB 才會開始將流量導向 instance。
+我們目前的做法是建立兩個 ASG(ASG1, ASG2)，一開始運行的是 ASG1
+
+部署的時候按照下面的步驟執行
+
+* Step 1. 更新 ASG2 的 launch configuration ，更新內容包含預期 instance 的數目與對應的 AMI id
+
+* Step 2. 將 ASG2 註冊到 ELB 
+
+* Step 3. 等 ELB health check 通過
+
+* Step 4.1 通過後把 ASG1 從 ELB 上移掉
+* Step 4.2 如果在指定時間內， health check 沒有通過就移除 ASG2
+
+* Step 5. 發送 Slack 通知
+
+
 <blockquote class="imgur-embed-pub" lang="en" data-id="a/Hsg3Q"><a href="//imgur.com/Hsg3Q"></a></blockquote><script async src="//s.imgur.com/min/embed.js" charset="utf-8"></script>
 
 雖然很多人覺得從 Slack 打指令來部署很潮，不過我自己是連打指令都很懶，所以我們是自己另外做了一個網站來部署，每當一個新的 Image 打包好的時候，就會自動部署到 staging 同時在 Slack 跳通知，如果我們想要部署到 production 的話，就點擊通知上的連結去執行部署的操作。
