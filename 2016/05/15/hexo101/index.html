@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>hexo101 | ocowchun</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <link rel="shortcut icon" href="/favicon.ico">
+  <link rel="stylesheet" href="/css/app.css">
+  <!-- <link rel='stylesheet' href='http://fonts.useso.com/css?family=Source+Code+Pro'> -->
+</head>
+
+<body>
+  <nav class="app-nav">
+  
+      
+        <a class="active" href="/.">home</a>
+        
+
+      
+  
+      
+        <a href="/archives">archive</a>
+      
+  
+      
+        <a href="/about">about</a>
+      
+  
+      
+        <a href="/atom.xml">rss</a>
+      
+  
+</nav>
+
+  <main class="post">
+  <article>
+  <h1 class="article-title">
+    <a href="/2016/05/15/hexo101/">hexo101</a>
+  </h1>
+
+  <section class="article-meta">
+    <p class="article-date">五月 15 2016</p>
+  </section>
+
+  <section class="article-entry">
+    <p>最近想要開始來寫點技術相關的文章，本來想使用 <a href="https://medium.com/" target="_blank" rel="external">medium</a>，可是他本身不支援 markdown，剛好看到 <a href="http://abalone0204.github.io/" target="_blank" rel="external">abalone0204</a> 使用的 <a href="https://hexo.io/zh-tw/" target="_blank" rel="external">Hexo</a>，就順手研究了一下，感覺還蠻適合拿來寫技術文章的，希望可以持續下去，雖然網路上介紹關於如何使用 Hexo架站的分享很多，不過還是遇上不少問題，像是如何安裝主題、public 與 source code 的 branch 要怎麼分，所以整理了一下 Hexo 常用的指令。</p>
+<h2 id="安裝-Hexo"><a href="#安裝-Hexo" class="headerlink" title="安裝 Hexo"></a><a href="https://hexo.io/zh-tw/docs/index.html" target="_blank" rel="external">安裝 Hexo</a></h2><figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">$ npm install -g hexo-cli</div></pre></td></tr></table></figure>
+<h2 id="建立資料夾"><a href="#建立資料夾" class="headerlink" title="建立資料夾"></a><a href="https://hexo.io/zh-tw/docs/setup.html" target="_blank" rel="external">建立資料夾</a></h2><figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div></pre></td><td class="code"><pre><div class="line">$ hexo init &lt;folder&gt;</div><div class="line">$ <span class="built_in">cd</span> &lt;folder&gt;</div><div class="line">$ npm install</div></pre></td></tr></table></figure>
+<h2 id="新增文章"><a href="#新增文章" class="headerlink" title="新增文章"></a><a href="https://hexo.io/zh-tw/docs/writing.html" target="_blank" rel="external">新增文章</a></h2><figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">$ hexo new [layout] &lt;title&gt;</div></pre></td></tr></table></figure>
+<h2 id="更換主題-themes"><a href="#更換主題-themes" class="headerlink" title="更換主題(themes)"></a>更換主題(themes)</h2><p>以 <a href="https://github.com/DrakeLeung/hexo-theme-again" target="_blank" rel="external">again</a> 為例</p>
+<h4 id="1-下載主題"><a href="#1-下載主題" class="headerlink" title="1. 下載主題"></a>1. 下載主題</h4><figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">$ git submodule add https://github.com/DrakeLeung/hexo-theme-again.git themes/again</div></pre></td></tr></table></figure>
+<h4 id="2-設定config"><a href="#2-設定config" class="headerlink" title="2. 設定config"></a>2. 設定config</h4><figure class="highlight yml"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line"><span class="attr">theme:</span> again</div></pre></td></tr></table></figure>
+<h2 id="路徑設定"><a href="#路徑設定" class="headerlink" title="路徑設定"></a><a href="https://hexo.io/docs/configuration.html#URL" target="_blank" rel="external">路徑設定</a></h2><p>根據部落格的網址來設置根目錄(root)，不然會讀取不到靜態資源。</p>
+<p>一般的網址都是根目錄(i.e. <code>https://blog.example.com</code>)，所以 <code>root</code> 就設定為 <code>/</code>。如果你的部落格是放在子目錄(例如本部落格)，那就要設定對應的 <code>root</code> ，以本部落格為例，首頁是 <code>www.ocowchun.com/blog</code> ，所以 <code>root</code> 要設定為 <code>/blog/</code>。</p>
+<figure class="highlight yml"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div></pre></td><td class="code"><pre><div class="line"><span class="attr">url:</span> http://www.ocowchun.com/blog</div><div class="line"><span class="attr">root:</span> /blog/</div></pre></td></tr></table></figure>
+<h2 id="部署到-github-pages"><a href="#部署到-github-pages" class="headerlink" title="部署到 github pages"></a>部署到 github pages</h2><blockquote>
+<p>我目前是將 source code 放在 <code>master</code> branch，然後另外開 <code>gh-pages</code> ，來放置 public 的檔案。</p>
+</blockquote>
+<h4 id="1-設定-config"><a href="#1-設定-config" class="headerlink" title="1. 設定 config"></a>1. 設定 config</h4><figure class="highlight yml"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div></pre></td><td class="code"><pre><div class="line"><span class="attr">deploy:</span></div><div class="line"><span class="attr">  type:</span> git</div><div class="line"><span class="attr">  repo:</span> git@github.com:your-name/your-repo.git</div><div class="line"><span class="attr">  branch:</span> gh-pages</div></pre></td></tr></table></figure>
+<h4 id="2-執行下面指令進行部署"><a href="#2-執行下面指令進行部署" class="headerlink" title="2. 執行下面指令進行部署"></a>2. 執行下面指令進行部署</h4><figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">$ hexo deploy --generate</div></pre></td></tr></table></figure>
+
+  </section>
+</article>
+
+  <div class="sharing grid">
+  <section class="profile grid-item grid">
+    <img class="avatar" src="https://www.gravatar.com/avatar/a7da45a4a1667717721e9a81d66845ff" alt="avatar" />
+    <div class="grid-item">
+      <p class="title"> ocowchun </p>
+      <p class="subtitle"> yoyoyo </p>
+    <div>
+  </section>
+
+  <section class="share-btns">
+    <!-- <p> share it if you like it~ </p> -->
+    <a
+  class="twitter-share-button"
+  data-size="large"
+  data-via="ocowchun"
+  href="https://twitter.com/intent/tweet?text=最近想要開始來寫點技術相關的文章，本來想"
+>
+  Tweet
+</a>
+
+<script>
+  window.twttr = (function(d, s, id) {
+  var js, fjs = d.getElementsByTagName(s)[0],
+    t = window.twttr || {};
+  if (d.getElementById(id)) return t;
+  js = d.createElement(s);
+  js.id = id;
+  js.src = "https://platform.twitter.com/widgets.js";
+  js.async = true;
+  fjs.parentNode.insertBefore(js, fjs);
+
+  t._e = [];
+  t.ready = function(f) {
+    t._e.push(f);
+  };
+
+  return t;
+}(document, "script", "twitter-wjs"));
+</script>
+
+  </section>
+</div>
+
+
+  
+    
+<section class="article-comment">
+  <div id="disqus_thread">
+    <noscript>Please enable JavaScript to view the <a href="//disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+  </div>
+</section>
+
+<script>
+  var disqus_shortname = 'ocowchun';
+  
+  var disqus_url = 'https://blog.ocowchun.com/2016/05/15/hexo101/';
+  
+  (function(){
+    var dsq = document.createElement('script');
+    dsq.type = 'text/javascript';
+    dsq.async = true;
+    dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+    (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+  })();
+</script>
+
+
+  
+</main>
+
+
+<script>
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-78480228-1', 'auto');
+  ga('send', 'pageview');
+
+</script>
+</body>
+</html>

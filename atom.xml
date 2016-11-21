@@ -1,0 +1,428 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Hexo</title>
+  <subtitle>yoyoyo</subtitle>
+  <link href="/atom.xml" rel="self"/>
+  
+  <link href="https://blog.ocowchun.com/"/>
+  <updated>2016-11-21T15:00:38.000Z</updated>
+  <id>https://blog.ocowchun.com/</id>
+  
+  <author>
+    <name>ocowchun</name>
+    
+  </author>
+  
+  <generator uri="http://hexo.io/">Hexo</generator>
+  
+  <entry>
+    <title>一鍵部署 Rails App</title>
+    <link href="https://blog.ocowchun.com/2016/11/21/one-click-deploy-rails-app/"/>
+    <id>https://blog.ocowchun.com/2016/11/21/one-click-deploy-rails-app/</id>
+    <published>2016-11-21T15:00:19.000Z</published>
+    <updated>2016-11-21T15:00:38.000Z</updated>
+    
+    <content type="html"><![CDATA[<p>本文主要是跟大家分享 <a href="https://sudo.com.tw/" target="_blank" rel="external">Sudo</a> 如何實作一鍵部署 Rails App </p>
+<h2 id="背景介紹"><a href="#背景介紹" class="headerlink" title="背景介紹"></a>背景介紹</h2><p>Sudo 的網站是使用 <a href="http://rubyonrails.org/" target="_blank" rel="external">Ruby on Rails</a> 開發並架設在 <a href="https://aws.amazon.com/tw/ec2/" target="_blank" rel="external">Amazon EC2</a> 上，以前是用 <a href="http://capistranorb.com/" target="_blank" rel="external">Capistrano</a> 來部署網站， Capistrano 官方的文件寫得很爛，詳細的使用方式主要是參考 <a href="https://leanpub.com/deploying_rails_applications" target="_blank" rel="external">Reliably Deploying Rails Applications</a> 這本書。</p>
+<p>使用 Capistrano 的缺點在於比較不容易去變動機器的數量，另外每次部署的時候都是去變動原本機器的內容，有時候難免會發生一些奇怪的靈異現象，為了增加部署的速度，可以快速地調整需要的機器數，同時擁有相對乾淨的執行環境，所以我們在今年九月開始決定要實作新的部署流程(沒想到剛做完沒多久就宣布要關站了 = =)。</p>
+<p>一開始的想法是想要 code commit 到 master branch 並且通過測試後，CI 會將最新的 code 打包成一個 image ，丟到 <a href="https://aws.amazon.com/tw/autoscaling/" target="_blank" rel="external">Auto Scaling group</a> 後，去變動 <a href="https://aws.amazon.com/tw/elasticloadbalancing/" target="_blank" rel="external">ELB</a>，聽起來好像也還好，不過實際下去做的時候才發現了不少問題，這篇文章就是我們實作這個部署流程的相關紀錄，希望可以幫助到需要的朋友。</p>
+<h2 id="核心概念"><a href="#核心概念" class="headerlink" title="核心概念"></a>核心概念</h2><h3 id="1-建置-Image"><a href="#1-建置-Image" class="headerlink" title="1. 建置 Image"></a>1. 建置 Image</h3><h3 id="2-動態更新組態檔案-config"><a href="#2-動態更新組態檔案-config" class="headerlink" title="2. 動態更新組態檔案(config)"></a>2. 動態更新組態檔案(config)</h3><h3 id="3-Deployment"><a href="#3-Deployment" class="headerlink" title="3. Deployment"></a>3. Deployment</h3><h2 id="建置-Image"><a href="#建置-Image" class="headerlink" title="建置 Image"></a>建置 Image</h2><p>個人覺得這是整個部署流程中最麻煩的部分，Image 建置有做好，後面的問題都不大，同時這也是差異最多的部分，因為每個 Application 需要打包的內容都不一樣，所以需要花一些時間去研究與測試。</p>
+<p>建置 Image 就是把所有需要的服務與 Application 的程式碼都包進去。<br>通常會包含以下幾種</p>
+<ol>
+<li>Application Sourece Code (i.e. 你的 Rails App)</li>
+<li>Application 的執行語言 (i.e. Ruby)</li>
+<li>Web Server (Nginx/Apache)</li>
+<li>data collector (Fluentd, Logstash, etc)</li>
+<li>monitor (Datadog, New Relic, etc)</li>
+<li>Service Discovery (Consul, etcd)</li>
+<li>monit</li>
+</ol>
+<p>建置 Image 的方式有很多種，你可以手動 ssh 進去機器然後一個指令一個指令下，或是寫 Shell Script ，不過在這個 DevOps 的時代，大家通常會使用一些更方便的工具來協助建置，比如說 <a href="https://www.chef.io/chef/" target="_blank" rel="external">Chef</a>、<a href="https://www.ansible.com/" target="_blank" rel="external">Ansible</a>、<a href="https://puppet.com/" target="_blank" rel="external">Puppet</a> ，詳細的差別我沒有特別研究，我只知道 Chef 是使用 Ruby 編寫，Ansible 好像執行速度很快(Steam 勸敗一哥 Henry 說的)</p>
+<p>在 Sudo 我們主要是使用 Chef 去建置環境，建置完成之後需要打包環境方便之後使用，除了各家雲端服務內建的打包服務外，你可以透過 <a href="https://www.packer.io/" target="_blank" rel="external">Packer</a> 來完成這項工作， Packer 可以將你的環境根據設定打包成對應的 Image ，支援 Amazon EC2, DigitalOcean, Google Compute Engine, Microsoft Azure, etc</p>
+<p>詳細的內容可以參考我們家 Steam 勸敗一哥 Henry 的文章 <a href="https://henry40408-blog.herokuapp.com/kitchen-and-packer/" target="_blank" rel="external">Kitchen 與 Packer 實戰</a></p>
+<h2 id="動態更新組態檔案"><a href="#動態更新組態檔案" class="headerlink" title="動態更新組態檔案"></a>動態更新組態檔案</h2><p>接下來是談動態更新組態檔案，在我們的應用程式裡面會有許多的設定比如 Facebook App ID, Database URL, etc 機器本身也會有需多的設定，例如第三方服務的 URL, License, etc <a href="https://12factor.net/config" target="_blank" rel="external">12-Factor App</a> 提到不要將 config 寫死在 code 裡面，亦或是寫死在機器裡面。</p>
+<p>將組態設定抽離出來，啟動 Image 再注入有許多的好處:</p>
+<ol>
+<li>不需要因為組態設定改變重新打包 Image</li>
+<li>不同 Stage 的 Application 可以盡可能地共用同一個 Image</li>
+<li>更進一步的是當組態設定變動後，自動去更新到相關的機器，然後重啟對應的服務。</li>
+</ol>
+<p><a href="https://www.consul.io" target="_blank" rel="external">Consul</a> 是一個很方便的工具，可以用來作 Health Check, Service Discovery, Key Value Store</p>
+<p><a href="https://github.com/hashicorp/consul-template" target="_blank" rel="external">Consul Template</a>: 使用 Consul 的 Key Value Store 產生檔案的工具，很適合用來變動設定檔，當 Consul Key Value 變動的時候，會去調整對應的 template 產生新的 config ，然後重啟相關的服務。</p>
+<p>做法就是在 Image 裡面包入 Consul, Consul Template 還有相關的設定，Instance 啟動時，會自動去尋找 Consul Server，找到之後 Consul Template 就會根據 Consul Key Value Store 去產生對應的 config ，當你需要變動設定檔的時候，你只需要在 Key Value Store 變動， Consul Template 就會自動產生新的設定重啟相關的服務，使用這樣的方式就可以簡單完成組態設定的相關操作。</p>
+<h2 id="Deployment"><a href="#Deployment" class="headerlink" title="Deployment"></a>Deployment</h2><p>我們目前的做法建立兩個 ASG(ASG1, ASG2)，將 ASG2 註冊到 ELB 然後把 ASG1 移掉，不過這樣的做法會有個問題在於 ASG2 裡面的 instance 需要先通過 ELB 的 health check, ELB 才會開始將流量導向 instance。</p>
+<p><blockquote class="imgur-embed-pub" lang="en" data-id="a/Hsg3Q"><a href="//imgur.com/Hsg3Q"></a></blockquote><script async src="//s.imgur.com/min/embed.js" charset="utf-8"></script></p>
+<p>雖然很多人覺得從 Slack 打指令來部署很潮，不過我自己是連打指令都很懶，所以我們是自己另外做了一個網站來部署，每當一個新的 Image 打包好的時候，就會自動部署到 staging 同時在 Slack 跳通知，如果我們想要部署到 production 的話，就點擊通知上的連結去執行部署的操作。</p>
+<p><blockquote class="imgur-embed-pub" lang="en" data-id="a/eyUU1"><a href="//imgur.com/eyUU1"></a></blockquote><script async src="//s.imgur.com/min/embed.js" charset="utf-8"></script></p>
+<h3 id="Reference"><a href="#Reference" class="headerlink" title="Reference:"></a>Reference:</h3><ul>
+<li><p><a href="http://docs.aws.amazon.com/opsworks/latest/userguide/best-deploy.html#best-deploy-environments-blue-green" target="_blank" rel="external">Using a Blue-Green Deployment Strategy in AWS</a><br>雖然裡面用的是 opsWork 不過許多概念都相通</p>
+</li>
+<li><p><a href="http://www.slideshare.net/AmazonWebServices/dvo401-deep-dive-into-bluegreen-deployments-on-aws" target="_blank" rel="external">Deep Dive into Blue/Green Deployments on AWS</a><br>很棒的投影片，分享了從不同 level 去執行 blue green deployment 的優缺點</p>
+</li>
+<li><p><a href="https://d0.awsstatic.com/whitepapers/AWS_Blue_Green_Deployments.pdf" target="_blank" rel="external">Blue/Green Deployments on AWS</a></p>
+</li>
+</ul>
+]]></content>
+    
+    <summary type="html">
+    
+      &lt;p&gt;本文主要是跟大家分享 &lt;a href=&quot;https://sudo.com.tw/&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;Sudo&lt;/a&gt; 如何實作一鍵部署 Rails App &lt;/p&gt;
+&lt;h2 id=&quot;背景介紹&quot;&gt;&lt;a href=&quot;#背景介紹&quot; c
+    
+    </summary>
+    
+    
+      <category term="Deployment" scheme="https://blog.ocowchun.com/tags/Deployment/"/>
+    
+      <category term="Packer" scheme="https://blog.ocowchun.com/tags/Packer/"/>
+    
+      <category term="Consul" scheme="https://blog.ocowchun.com/tags/Consul/"/>
+    
+      <category term="AWS" scheme="https://blog.ocowchun.com/tags/AWS/"/>
+    
+      <category term="Chef" scheme="https://blog.ocowchun.com/tags/Chef/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>筆記: Migrate your Existing Express Applications to AWS Lambda</title>
+    <link href="https://blog.ocowchun.com/2016/11/03/note-migrate-your-existing-express-applications-to-aws-lambda/"/>
+    <id>https://blog.ocowchun.com/2016/11/03/note-migrate-your-existing-express-applications-to-aws-lambda/</id>
+    <published>2016-11-03T14:34:10.000Z</published>
+    <updated>2016-11-16T14:40:11.000Z</updated>
+    
+    <content type="html"><![CDATA[<iframe width="560" height="315" src="https://www.youtube.com/embed/Cuh_gtFX5gI" frameborder="0" allowfullscreen></iframe>
+
+<p>本文是關於 <a href="https://www.youtube.com/watch?v=Cuh_gtFX5gI" target="_blank" rel="external">Migrate your Existing Express Applications to AWS Lambda</a> 的筆記，影片內容在說明怎麼把 <a href="https://expressjs.com/" target="_blank" rel="external">Express</a> 專案整個搬移到 AWS Lambda 上。</p>
+<h2 id="API-Gateway-的新功能"><a href="#API-Gateway-的新功能" class="headerlink" title="API Gateway 的新功能"></a>API Gateway 的新功能</h2><ul>
+<li>Catch-all resource paths</li>
+<li>ANY http method</li>
+<li>PROXY integrations</li>
+</ul>
+<h3 id="Catch-all-resource-paths"><a href="#Catch-all-resource-paths" class="headerlink" title="Catch-all resource paths"></a>Catch-all resource paths</h3><p>以往需要定義非常清楚的路徑，來說明要用哪個 fucntion 處理。不過這樣的缺點在於，<code>非常耗時</code>， catch all 可以讓我們可以用比較粗略的方式來設定 API Gateway 的路徑，所以可以快速完成建置，不過相對我們的文件與自動生成的 sdk 也會來得比較不嚴謹。<br>Swagger 支援這個新功能</p>
+<h3 id="ANY-http-method"><a href="#ANY-http-method" class="headerlink" title="ANY http method"></a>ANY http method</h3><p>將所有的 method (GET, POST, PUT, …) 都對應到相同的 integration，好壞處跟前者差不多，兩個可以一起用，就只需要非常少數的 integration喔喔喔<br>Swagger 也支援這個新功能</p>
+<h3 id="PROXY-integrations"><a href="#PROXY-integrations" class="headerlink" title="PROXY integrations"></a>PROXY integrations</h3><p>不再需要 input/output mappings !</p>
+<h4 id="HTTP-PROXY"><a href="#HTTP-PROXY" class="headerlink" title="HTTP_PROXY"></a>HTTP_PROXY</h4><p>這個我用不到，跳過了。</p>
+<h4 id="AWS-PROXY"><a href="#AWS-PROXY" class="headerlink" title="AWS_PROXY"></a>AWS_PROXY</h4><p>當 request 進到 API Gateway後，會根據 request 自動產生 event，另外會將 Lambda 執行的結果轉換成 HTTP Response ， Lambda 輸出必須符合下面的格式</p>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div></pre></td><td class="code"><pre><div class="line">&#123;</div><div class="line">    <span class="string">"statusCode"</span>: httpStatusCode,</div><div class="line">    <span class="string">"headers"</span>: &#123; <span class="string">"headerName"</span>: <span class="string">"headerValue"</span>, ... &#125;,</div><div class="line">    <span class="string">"body"</span>: <span class="string">"..."</span></div><div class="line">&#125;</div></pre></td></tr></table></figure>
+<p>如果 Lambda 輸出的格式不正確會回傳  <code>502 Bad Gateway</code></p>
+<p>細節可以看這裡 <a href="http://docs.aws.amazon.com/apigateway/latest/developerguide/api-gateway-set-up-simple-proxy.html#api-gateway-set-up-lambda-proxy-integration-on-proxy-resource" target="_blank" rel="external">Set Up a Proxy Resource with the Lambda Proxy Integration</a><br>Swagger 也支援這個新功能</p>
+<h3 id="官方支援-Express-的-package"><a href="#官方支援-Express-的-package" class="headerlink" title="官方支援 Express 的 package"></a>官方支援 Express 的 package</h3><p><a href="https://github.com/awslabs/aws-serverless-express" target="_blank" rel="external">aws-serverless-express</a></p>
+<p>很棒的一張圖，解釋了整個 flow</p>
+<p><blockquote class="imgur-embed-pub" lang="en" data-id="a/AJ5yz"><a href="//imgur.com/AJ5yz"></a></blockquote><script async src="//s.imgur.com/min/embed.js" charset="utf-8"></script></p>
+<h2 id="如何-Migrate-現有的-Express-App-到-AWS-Lambda"><a href="#如何-Migrate-現有的-Express-App-到-AWS-Lambda" class="headerlink" title="如何 Migrate 現有的 Express App 到 AWS Lambda"></a>如何 Migrate 現有的 Express App 到 AWS Lambda</h2><ol>
+<li>安裝相關的 dependencies (包含 aws-serverless-express)</li>
+<li>建立一個 JavaScript wrapper</li>
+<li>打包你的專案成 zip </li>
+<li>建立 Lambda </li>
+<li>設定 API Gateway endpoint 來做 proxy</li>
+</ol>
+<h2 id="Demo-Express-to-Lambda"><a href="#Demo-Express-to-Lambda" class="headerlink" title="Demo: Express to Lambda"></a>Demo: Express to Lambda</h2><p>解釋 <a href="https://github.com/awslabs/aws-serverless-express" target="_blank" rel="external">aws-serverless-express</a> 的 sourece code，講解如何將 API Gateway 的內容轉成 Express 接收的格式，還有如何將 response 轉換成 API Gateway 接受的格式，然後手動操作一遍。</p>
+<h4 id="可以使用-aws-serverless-express-middleware-來取得-API-Gateway-的-contetxt"><a href="#可以使用-aws-serverless-express-middleware-來取得-API-Gateway-的-contetxt" class="headerlink" title="可以使用 aws-serverless-express/middleware 來取得 API Gateway 的 contetxt"></a>可以使用 <code>aws-serverless-express/middleware</code> 來取得 API Gateway 的 contetxt</h4><figure class="highlight javascript"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">const</span> awsServerlessExpressMiddleware = <span class="built_in">require</span>*(<span class="string">'aws-serverless-express/middleware'</span>);</div><div class="line">app.use(awsServerlessExpressMiddleware.eventContext());</div></pre></td></tr></table></figure>
+<h4 id="Enable-API-Gateway-CORS"><a href="#Enable-API-Gateway-CORS" class="headerlink" title="Enable API Gateway CORS"></a>Enable API Gateway CORS</h4><p>API Gateway 建立 resource 的時候，如果有選擇 Enable API Gateway CORS 的話，會自動產生一個 Method 為 OPTIONS 的 API Gateway Method，來處理瀏覽器的 preflight<br>更多 CORS 可以看阮一峰的<a href="http://www.ruanyifeng.com/blog/2016/04/cors.html" target="_blank" rel="external">跨域資源共享CORS 詳解</a></p>
+<h2 id="Express-on-Serverless"><a href="#Express-on-Serverless" class="headerlink" title="Express on Serverless"></a>Express on Serverless</h2><ul>
+<li>Auto Scale</li>
+<li>有多少請求付多少錢</li>
+<li>一樣可以做單元測試</li>
+<li>不需要變動原本的程式碼</li>
+</ul>
+<p><strong>這樣的方式也可以套用在其他的 Web Framework</strong>，你只需要去包裝 request 透過 proxy 轉給原本的 app ，然後將輸出的結果轉換成支援的格式。</p>
+<h2 id="Best-Practice"><a href="#Best-Practice" class="headerlink" title="Best Practice"></a>Best Practice</h2><h4 id="1-1-Mapping"><a href="#1-1-Mapping" class="headerlink" title="1:1 Mapping"></a>1:1 Mapping</h4><p>每個 API call 都是去觸發 stateless Lambda function ， 每個 express instance 一次只會處理一個請求，所以比較不需要擔心 concurrency 的問題。</p>
+<h4 id="Memory"><a href="#Memory" class="headerlink" title="Memory"></a>Memory</h4><p>如果你的應用是 CPU bound ，增加 memory 就可以增加執行速度。</p>
+<h4 id="Lazily-load-resources"><a href="#Lazily-load-resources" class="headerlink" title="Lazily load resources"></a>Lazily load resources</h4><p>Lambda handler 之外的 scope，只有在第一次呼叫的時候會執行到，接下來就被快取起來了。這個特性可以用來儲存資料，加速請求，<code>不過請小心使用!!</code>，畢竟儲存過多的資料會影響啟動時間，而且本質上來說你應該要<code>將每個請求視為 stateless</code>。</p>
+<h4 id="Offload-tasks-to-Gateway"><a href="#Offload-tasks-to-Gateway" class="headerlink" title="Offload tasks to Gateway"></a>Offload tasks to Gateway</h4><p>除了原本的方式之外，你可以使用 IAM 或是 custom authorization 來應付 Access Control。</p>
+<h2 id="QA-時間"><a href="#QA-時間" class="headerlink" title="QA 時間"></a>QA 時間</h2>]]></content>
+    
+    <summary type="html">
+    
+      &lt;iframe width=&quot;560&quot; height=&quot;315&quot; src=&quot;https://www.youtube.com/embed/Cuh_gtFX5gI&quot; frameborder=&quot;0&quot; allowfullscreen&gt;&lt;/iframe&gt;
+
+&lt;p&gt;本文是關於 &lt;a href
+    
+    </summary>
+    
+    
+      <category term="AWS Lambda" scheme="https://blog.ocowchun.com/tags/AWS-Lambda/"/>
+    
+      <category term="API Gateway" scheme="https://blog.ocowchun.com/tags/API-Gateway/"/>
+    
+      <category term="Express" scheme="https://blog.ocowchun.com/tags/Express/"/>
+    
+      <category term="serverless" scheme="https://blog.ocowchun.com/tags/serverless/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>如何追蹤 AWS Lambda 錯誤</title>
+    <link href="https://blog.ocowchun.com/2016/08/13/how-to-track-aws-lambda-error/"/>
+    <id>https://blog.ocowchun.com/2016/08/13/how-to-track-aws-lambda-error/</id>
+    <published>2016-08-13T03:04:40.000Z</published>
+    <updated>2016-11-16T14:40:11.000Z</updated>
+    
+    <content type="html"><![CDATA[<p><a href="https://aws.amazon.com/tw/lambda/" target="_blank" rel="external">AWS Lambda</a>是個很方便的東西，可以免去管理機器的成本，又只需要按照使用的次數付費，不過 Lambda 目前在管理上還有很多麻煩的地方，比如說檢視使用數據(觸發次數、執行時間、成功/失敗數)，錯誤訊息的追蹤。</p>
+<p>Lambda 本身有提供簡單的 dashboard，可以查看觸發次數、執行時間、失敗數…等，不過一次只能查看一個 function，當你的 function 數變多時(比如說 30 個，這其實是非常容易達到的數字) ，如果你想要查看哪些 function 的使用次數最多、執行時間最久，或其他資料就必須自己手動做一些處理。比如自己設定 CloudWatch Dashboard，不然就是自己寫程式來呈現相關數據。</p>
+<p>因為習慣使用 <a href="https://rollbar.com/" target="_blank" rel="external">Rollbar</a> 來管理錯誤相關的事情，所以決定研究一下如何把 Lambda 的錯誤丟到 <a href="https://rollbar.com/" target="_blank" rel="external">Rollbar</a>。一開始的想法是當發生錯誤的時候，使用 <a href="https://aws.amazon.com/sns/" target="_blank" rel="external">SNS</a> 發出通知，然後設定一個追蹤錯誤的 Lambda 訂閱該通知，將相關資料與錯誤訊息丟到 Rollbar，一切看起來是那麼的美好，不過因為部分的 Lambda 有設定 VPC ，沒辦法使用 SNS ，找了一下之後發現可以從 CloudWatch Log 來處理。</p>
+<p> Lambda 執行結束時(不論成功或失敗) 都會將結果輸出到 CloudWatch Log 。因此可以透過訂閱 ClouWatch Log ，將偵測到包含 errorMessage 的 CloudWatch 丟到 Rollbar 來追蹤錯誤。這邊有個麻煩的地方在於，每個 Lambda 都會有一個自己的 log group，所以如果你寫了 10個 Lambda 你就有 10 個 log group 需要追蹤，就算使用 <a href="https://www.terraform.io/" target="_blank" rel="external">Terraform</a> 來設定還是很麻煩，不過至少比一個一個 CloudWatch 去看方便多了。</p>
+<h2 id="訂閱-ClouWatch-Log-追蹤錯誤的-Lambda-程式碼"><a href="#訂閱-ClouWatch-Log-追蹤錯誤的-Lambda-程式碼" class="headerlink" title="訂閱 ClouWatch Log 追蹤錯誤的 Lambda 程式碼"></a>訂閱 ClouWatch Log 追蹤錯誤的 Lambda 程式碼</h2><figure class="highlight js"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div><div class="line">19</div><div class="line">20</div><div class="line">21</div><div class="line">22</div><div class="line">23</div><div class="line">24</div><div class="line">25</div><div class="line">26</div><div class="line">27</div><div class="line">28</div><div class="line">29</div><div class="line">30</div><div class="line">31</div><div class="line">32</div><div class="line">33</div><div class="line">34</div><div class="line">35</div><div class="line">36</div><div class="line">37</div><div class="line">38</div><div class="line">39</div><div class="line">40</div><div class="line">41</div><div class="line">42</div><div class="line">43</div><div class="line">44</div><div class="line">45</div><div class="line">46</div><div class="line">47</div><div class="line">48</div><div class="line">49</div><div class="line">50</div><div class="line">51</div><div class="line">52</div><div class="line">53</div><div class="line">54</div><div class="line">55</div><div class="line">56</div><div class="line">57</div><div class="line">58</div><div class="line">59</div><div class="line">60</div><div class="line">61</div><div class="line">62</div><div class="line">63</div><div class="line">64</div><div class="line">65</div><div class="line">66</div><div class="line">67</div><div class="line">68</div><div class="line">69</div><div class="line">70</div><div class="line">71</div><div class="line">72</div><div class="line">73</div><div class="line">74</div><div class="line">75</div><div class="line">76</div><div class="line">77</div><div class="line">78</div><div class="line">79</div><div class="line">80</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">let</span> zlib = <span class="built_in">require</span>(<span class="string">'zlib'</span>);</div><div class="line"><span class="keyword">let</span> rollbar = <span class="built_in">require</span>(<span class="string">"rollbar"</span>);</div><div class="line"><span class="keyword">let</span> _ = <span class="built_in">require</span>(<span class="string">'underscore'</span>);</div><div class="line"><span class="keyword">let</span> <span class="built_in">Promise</span> = <span class="built_in">require</span>(<span class="string">'bluebird'</span>);</div><div class="line"></div><div class="line"><span class="comment">//建立錯誤訊息的物件</span></div><div class="line"><span class="function"><span class="keyword">function</span> <span class="title">buildErrorItem</span>(<span class="params">data</span>) </span>&#123;</div><div class="line">  <span class="keyword">let</span> item = &#123;&#125;;</div><div class="line">  item.title = data.logGroup.replace(<span class="string">'/aws/lambda/'</span>, <span class="string">''</span>);</div><div class="line"></div><div class="line"><span class="comment">// 判斷是否有錯誤訊息</span></div><div class="line">  <span class="keyword">let</span> logEvent = _.find(data.logEvents, <span class="function"><span class="keyword">function</span>(<span class="params">event</span>) </span>&#123;</div><div class="line">    <span class="keyword">return</span> event.message.indexOf(<span class="string">'errorMessage'</span>) &gt;= <span class="number">0</span>;</div><div class="line">  &#125;);</div><div class="line"></div><div class="line">  item.logStream = data.logStream;</div><div class="line">  item.logEvents = data.logEvents;</div><div class="line"></div><div class="line"><span class="comment">// 如果有錯誤訊息，才需要通知 Rollbar</span></div><div class="line">  <span class="keyword">if</span> (logEvent) &#123;</div><div class="line">    item.reportRollbar = <span class="literal">true</span>;</div><div class="line">  &#125; <span class="keyword">else</span> &#123;</div><div class="line">    item.reportRollbar = <span class="literal">false</span>;</div><div class="line">  &#125;</div><div class="line">  <span class="keyword">return</span> item;</div><div class="line"></div><div class="line">&#125;</div><div class="line"></div><div class="line"><span class="comment">// 呼叫 buildErrorItem 產生錯誤訊息的物件，然後判斷是否需要通知 Rollbar</span></div><div class="line"><span class="function"><span class="keyword">function</span> <span class="title">excuteReportMessage</span>(<span class="params">data</span>) </span>&#123;</div><div class="line"><span class="comment">// 初始化 Rollbar</span></div><div class="line">  <span class="keyword">const</span> ROLLBAR_POST_SERVER_ITEM_ACCESS_TOKEN = </div><div class="line">  env.ROLLBAR_POST_SERVER_ITEM_ACCESS_TOKEN;</div><div class="line">  rollbar.init(ROLLBAR_POST_SERVER_ITEM_ACCESS_TOKEN);</div><div class="line"></div><div class="line">  <span class="keyword">let</span> item = buildErrorItem(data);</div><div class="line">  <span class="keyword">let</span> title = item.title;</div><div class="line"></div><div class="line">  <span class="keyword">return</span> <span class="keyword">new</span> <span class="built_in">Promise</span>(<span class="function"><span class="keyword">function</span>(<span class="params">resolve, reject</span>) </span>&#123;</div><div class="line">    <span class="keyword">if</span> (item.reportRollbar) &#123;</div><div class="line">      rollbar.reportMessageWithPayloadData(title, &#123;</div><div class="line">        <span class="attr">level</span>: <span class="string">"error"</span>,</div><div class="line">        <span class="attr">custom</span>: item</div><div class="line">      &#125;, <span class="literal">null</span>, <span class="function"><span class="keyword">function</span>(<span class="params"></span>) </span>&#123;</div><div class="line">        resolve(<span class="string">"report rollbar success"</span>);</div><div class="line">      &#125;);</div><div class="line">    &#125; <span class="keyword">else</span> &#123;</div><div class="line">      resolve(<span class="string">"no necessary to report"</span>);</div><div class="line">    &#125;</div><div class="line">  &#125;);</div><div class="line">&#125;</div><div class="line"></div><div class="line"><span class="comment">// CloudWatch Log 輸入的方式是 buffer ，需要先轉成 json 物件</span></div><div class="line"><span class="comment">// 然後呼叫 excuteReportMessage 回報 Rollbar</span></div><div class="line"><span class="function"><span class="keyword">function</span> <span class="title">reportCWLError</span>(<span class="params">input, ctx</span>) </span>&#123;</div><div class="line">  <span class="keyword">let</span> payload = <span class="keyword">new</span> Buffer(input.awslogs.data, <span class="string">'base64'</span>);</div><div class="line">  <span class="built_in">console</span>.log(<span class="string">"===aws cloud watch log==="</span>);</div><div class="line">  zlib.gunzip(payload, <span class="function"><span class="keyword">function</span>(<span class="params">e, result</span>) </span>&#123;</div><div class="line">    <span class="keyword">if</span> (e) &#123;</div><div class="line">      ctx.fail(e);</div><div class="line">    &#125; <span class="keyword">else</span> &#123;</div><div class="line">      <span class="keyword">let</span> data = <span class="built_in">JSON</span>.parse(result.toString(<span class="string">'ascii'</span>));</div><div class="line">      excuteReportMessage(data).then(<span class="function"><span class="keyword">function</span>(<span class="params"></span>) </span>&#123;</div><div class="line">        ctx.succeed(&#123;</div><div class="line">          <span class="attr">result</span>: <span class="string">'success'</span></div><div class="line">        &#125;);</div><div class="line">      &#125;).catch(<span class="function"><span class="keyword">function</span>(<span class="params">err</span>) </span>&#123;</div><div class="line">        ctx.fail(err);</div><div class="line">      &#125;);</div><div class="line">    &#125;</div><div class="line">  &#125;);</div><div class="line">&#125;</div><div class="line"></div><div class="line">exports.handle = <span class="function"><span class="keyword">function</span>(<span class="params">input, ctx</span>) </span>&#123;</div><div class="line">  <span class="keyword">if</span> (input.awslogs &amp;&amp; input.awslogs.data) &#123;</div><div class="line">    reportCWLError(input, ctx);</div><div class="line">  &#125; <span class="keyword">else</span> &#123;</div><div class="line">    ctx.fail(<span class="string">"no aws log"</span>);</div><div class="line">  &#125;</div><div class="line">&#125;</div></pre></td></tr></table></figure>
+<h2 id="訂閱-Lambda-CWL-的-Terraform-程式碼"><a href="#訂閱-Lambda-CWL-的-Terraform-程式碼" class="headerlink" title="訂閱 Lambda CWL 的 Terraform 程式碼"></a>訂閱 Lambda CWL 的 Terraform 程式碼</h2><figure class="highlight go"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div></pre></td><td class="code"><pre><div class="line">resource <span class="string">"aws_lambda_permission"</span> <span class="string">"allow_report_error_access_my_awesome_lambda_cwl"</span> &#123;</div><div class="line">    statement_id = <span class="string">"AllowExecutionFromCWL2"</span></div><div class="line">    action = <span class="string">"lambda:InvokeFunction"</span></div><div class="line">    function_name = <span class="string">"arn:aws:lambda:ap-northeast-1:12345678:function:report_error"</span></div><div class="line">    principal = <span class="string">"logs.ap-northeast-1.amazonaws.com"</span></div><div class="line">    source_arn = <span class="string">"arn:aws:logs:ap-northeast-1:12345678:log-group:/aws/lambda/my_awesome_lambda:*"</span></div><div class="line">    source_account = <span class="string">"12345678"</span></div><div class="line">&#125;</div><div class="line"></div><div class="line">resource <span class="string">"aws_cloudwatch_log_subscription_filter"</span> <span class="string">"allow_report_error_access_my_awesome_lambda_cwl"</span> &#123;</div><div class="line">  name = <span class="string">"allow_report_error_access_my_awesome_lambda_cwl"</span></div><div class="line">  log_group_name = <span class="string">"/aws/lambda/my_awesome_lambda"</span></div><div class="line">  filter_pattern = <span class="string">""</span></div><div class="line">  destination_arn = <span class="string">"arn:aws:lambda:ap-northeast-1:12345678:function:report_error"</span></div><div class="line">  depends_on = [<span class="string">"aws_lambda_permission.allow_report_error_access_my_awesome_lambda_cwl"</span>]</div><div class="line">&#125;</div></pre></td></tr></table></figure>
+<h2 id="References"><a href="#References" class="headerlink" title="References"></a>References</h2><ul>
+<li><a href="http://docs.aws.amazon.com/lambda/latest/dg/nodejs-prog-model-handler.html" target="_blank" rel="external">Lambda Function Handler (Node.js)</a></li>
+</ul>
+]]></content>
+    
+    <summary type="html">
+    
+      &lt;p&gt;&lt;a href=&quot;https://aws.amazon.com/tw/lambda/&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;AWS Lambda&lt;/a&gt;是個很方便的東西，可以免去管理機器的成本，又只需要按照使用的次數付費，不過 Lambda 目前在
+    
+    </summary>
+    
+    
+      <category term="Lambda" scheme="https://blog.ocowchun.com/tags/Lambda/"/>
+    
+      <category term="Rollbar" scheme="https://blog.ocowchun.com/tags/Rollbar/"/>
+    
+      <category term="SNS" scheme="https://blog.ocowchun.com/tags/SNS/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>Introduction To MJML</title>
+    <link href="https://blog.ocowchun.com/2016/06/15/introduction-to-mjml/"/>
+    <id>https://blog.ocowchun.com/2016/06/15/introduction-to-mjml/</id>
+    <published>2016-06-15T13:02:31.000Z</published>
+    <updated>2016-11-16T14:40:11.000Z</updated>
+    
+    <content type="html"><![CDATA[<p>使用 html 寫 email 時，一定都遇過以下這些問題</p>
+<ol>
+<li>用 table 排版超麻煩</li>
+<li>不能直接使用 css，所以會有一堆重複的code</li>
+<li>用手機開信的時候，版面爆炸了</li>
+</ol>
+<p>這些問題 <a href="https://mjml.io/" target="_blank" rel="external">MJML</a> 都幫我們解決了。</p>
+<p>MJML 使用 react 將 預先設計好的 MJML element 轉換成 html，你可以用類似 grid 的方式來排版，內建支援 mobile email，透過將重複使用的部分抽離成 custom element 來減少程式碼重複的問題，簡單的說你只要會寫 react ，你就可以無腦設計出長得漂亮，手機瀏覽不跑版的 email 。</p>
+<h2 id="開始你的第一封-MJML"><a href="#開始你的第一封-MJML" class="headerlink" title="開始你的第一封 MJML"></a>開始你的第一封 MJML</h2><p>你可以使用 MJML 的<a href="https://mjml.io/try-it-live" target="_blank" rel="external">線上編輯器</a> 或是<a href="https://mjml.io/download" target="_blank" rel="external">下載</a> MJML 的 package</p>
+<p>然後貼下面這段 code</p>
+<figure class="highlight html"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div></pre></td><td class="code"><pre><div class="line"><span class="tag">&lt;<span class="name">mjml</span>&gt;</span></div><div class="line">  <span class="tag">&lt;<span class="name">mj-body</span>&gt;</span></div><div class="line">    <span class="tag">&lt;<span class="name">mj-container</span>&gt;</span></div><div class="line">      <span class="tag">&lt;<span class="name">mj-section</span>&gt;</span></div><div class="line">        <span class="tag">&lt;<span class="name">mj-column</span>&gt;</span></div><div class="line"></div><div class="line">          <span class="tag">&lt;<span class="name">mj-image</span> <span class="attr">width</span>=<span class="string">"100"</span> <span class="attr">src</span>=<span class="string">"/assets/img/logo-small.png"</span>&gt;</span><span class="tag">&lt;/<span class="name">mj-image</span>&gt;</span></div><div class="line"></div><div class="line">          <span class="tag">&lt;<span class="name">mj-divider</span> <span class="attr">border-color</span>=<span class="string">"#F45E43"</span>&gt;</span><span class="tag">&lt;/<span class="name">mj-divider</span>&gt;</span></div><div class="line"></div><div class="line">          <span class="tag">&lt;<span class="name">mj-text</span> <span class="attr">font-size</span>=<span class="string">"20px"</span> <span class="attr">color</span>=<span class="string">"#F45E43"</span> <span class="attr">font-family</span>=<span class="string">"helvetica"</span>&gt;</span>Hello World<span class="tag">&lt;/<span class="name">mj-text</span>&gt;</span></div><div class="line"></div><div class="line">        <span class="tag">&lt;/<span class="name">mj-column</span>&gt;</span></div><div class="line">      <span class="tag">&lt;/<span class="name">mj-section</span>&gt;</span></div><div class="line">    <span class="tag">&lt;/<span class="name">mj-container</span>&gt;</span></div><div class="line">  <span class="tag">&lt;/<span class="name">mj-body</span>&gt;</span></div><div class="line"><span class="tag">&lt;/<span class="name">mjml</span>&gt;</span></div></pre></td></tr></table></figure>
+<p>如果你是使用自己的編輯器的話，可以將檔案命名為 <code>hello.mjml</code> ，然後執行</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">$ mjml -r index.mjml -o index.html</div></pre></td></tr></table></figure>
+<p>恭喜你，你已經完成了你的第一封信件。</p>
+<h2 id="瞭解-MJML-的排版"><a href="#瞭解-MJML-的排版" class="headerlink" title="瞭解 MJML 的排版"></a>瞭解 MJML 的排版</h2><p>信件內容會包在 <code>mj-container</code> 底下，<code>mj-container</code> 底下會分成好幾個 <code>section</code>，<br>每個 <code>section</code> 底下又會有多個 <code>column</code>，目前每個 <code>section</code> 最多可以有4個 <code>column</code></p>
+<p><img src="http://i.imgur.com/6kfw0KS.png" alt="Imgur"></p>
+<h3 id="column-size"><a href="#column-size" class="headerlink" title="column size"></a><a href="https://mjml.io/documentation/#column-sizing" target="_blank" rel="external">column size</a></h3><p>每個 section 裡面都會包含 column(最多4個), section 的最大寬度為 600px ，會根據你的 column 數目去做調整。</p>
+<figure class="highlight html"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div></pre></td><td class="code"><pre><div class="line"><span class="tag">&lt;<span class="name">mjml</span>&gt;</span> </div><div class="line">  <span class="tag">&lt;<span class="name">mj-body</span>&gt;</span></div><div class="line">   <span class="tag">&lt;<span class="name">mj-container</span>&gt;</span> </div><div class="line">     <span class="tag">&lt;<span class="name">mj-section</span>&gt;</span></div><div class="line">      <span class="tag">&lt;<span class="name">mj-column</span> &gt;</span> <span class="comment">&lt;!-- First column content --&gt;</span> <span class="tag">&lt;/<span class="name">mj-column</span>&gt;</span> </div><div class="line">      <span class="tag">&lt;<span class="name">mj-column</span>&gt;</span> <span class="comment">&lt;!-- Second column content --&gt;</span> <span class="tag">&lt;/<span class="name">mj-column</span>&gt;</span> </div><div class="line">    <span class="tag">&lt;/<span class="name">mj-section</span>&gt;</span></div><div class="line">  <span class="tag">&lt;/<span class="name">mj-container</span>&gt;</span></div><div class="line"><span class="tag">&lt;/<span class="name">mj-body</span>&gt;</span> </div><div class="line"><span class="tag">&lt;/<span class="name">mjml</span>&gt;</span></div></pre></td></tr></table></figure>
+<p>以上面這段 mjml 為例，600px/2 column,每個 <code>mj-column</code> 會有 300px </p>
+<h4 id="手動調整寬度"><a href="#手動調整寬度" class="headerlink" title="手動調整寬度"></a>手動調整寬度</h4><figure class="highlight html"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div></pre></td><td class="code"><pre><div class="line"><span class="tag">&lt;<span class="name">mjml</span>&gt;</span> </div><div class="line">  <span class="tag">&lt;<span class="name">mj-body</span>&gt;</span></div><div class="line">   <span class="tag">&lt;<span class="name">mj-container</span>&gt;</span> </div><div class="line">     <span class="tag">&lt;<span class="name">mj-section</span>&gt;</span></div><div class="line">      <span class="tag">&lt;<span class="name">mj-column</span> <span class="attr">width</span>=<span class="string">"300px"</span>&gt;</span> <span class="comment">&lt;!-- First column content --&gt;</span> <span class="tag">&lt;/<span class="name">mj-column</span>&gt;</span> </div><div class="line">      <span class="tag">&lt;<span class="name">mj-column</span>&gt;</span> <span class="comment">&lt;!-- Second column content --&gt;</span> <span class="tag">&lt;/<span class="name">mj-column</span>&gt;</span> </div><div class="line">    <span class="tag">&lt;/<span class="name">mj-section</span>&gt;</span></div><div class="line">  <span class="tag">&lt;/<span class="name">mj-container</span>&gt;</span></div><div class="line"><span class="tag">&lt;/<span class="name">mj-body</span>&gt;</span> </div><div class="line"><span class="tag">&lt;/<span class="name">mjml</span>&gt;</span></div></pre></td></tr></table></figure>
+<p>如果你手動指定了 section 中某個 column 的寬度 ，<strong>該 section 全部的 column 都必須手動設定寬度。</strong></p>
+<h3 id="Nesting"><a href="#Nesting" class="headerlink" title="Nesting"></a><a href="https://mjml.io/documentation/#nesting" target="_blank" rel="external">Nesting</a></h3><p>目前 column 裡面 不可以有 section,column component。</p>
+<h3 id="Styling"><a href="#Styling" class="headerlink" title="Styling"></a><a href="https://mjml.io/documentation/#tag-styling" target="_blank" rel="external">Styling</a></h3><p>目前無法用寫 css 的方式來表達樣式， style 也有所限制，我個人的做法是將常用的部分變成 custom component。</p>
+<h2 id="使用-stater-kit-加速開發"><a href="#使用-stater-kit-加速開發" class="headerlink" title="使用 stater-kit 加速開發"></a>使用 stater-kit 加速開發</h2><p>不過在實際開發的時候，我個人還是習慣用 sublime text 來開發，可以先使用<a href="https://github.com/epayet/mjml-starter-kit" target="_blank" rel="external">epayet/mjml-starter-kit</a>來練習。</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div></pre></td><td class="code"><pre><div class="line">$ git <span class="built_in">clone</span> https://github.com/epayet/mjml-starter-kit.git</div><div class="line">$ <span class="built_in">cd</span> mjml-starter-kit</div><div class="line">$ npm install</div><div class="line">$ npm start</div></pre></td></tr></table></figure>
+<p><a href="https://mjml.io/documentation/#standard-components" target="_blank" rel="external">更多 MJML 內建的 component</a><br><a href="https://mjml.io/templates" target="_blank" rel="external">Templates</a></p>
+<h2 id="結論"><a href="#結論" class="headerlink" title="結論"></a>結論</h2><p>MJML 使用 grid 的方式來排版，同時還支援手機頁面的樣式，可以加速 email 的開發過程，本文簡單的示範了如何使用 MJML 來寫一個簡單的信件，下次將會分享如何使用 custom component 來建立更複雜的頁面。</p>
+]]></content>
+    
+    <summary type="html">
+    
+      &lt;p&gt;使用 html 寫 email 時，一定都遇過以下這些問題&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;用 table 排版超麻煩&lt;/li&gt;
+&lt;li&gt;不能直接使用 css，所以會有一堆重複的code&lt;/li&gt;
+&lt;li&gt;用手機開信的時候，版面爆炸了&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;這些問題 &lt;a 
+    
+    </summary>
+    
+    
+      <category term="MJML" scheme="https://blog.ocowchun.com/tags/MJML/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>使用 Apex 協助開發 AWS Lambda</title>
+    <link href="https://blog.ocowchun.com/2016/05/28/lambda-development/"/>
+    <id>https://blog.ocowchun.com/2016/05/28/lambda-development/</id>
+    <published>2016-05-28T12:49:55.000Z</published>
+    <updated>2016-11-16T14:40:11.000Z</updated>
+    
+    <content type="html"><![CDATA[<p>本文將簡單分享如何快速的開發 <a href="https://aws.amazon.com/tw/documentation/lambda/" target="_blank" rel="external">AWS Lambda</a><br>使用的語言為 JavaScript</p>
+<p>使用 AWS Lambda 的好處在於你完全不用管 server 你就是寫code就對了。</p>
+<p>不過他也有一些限制，例如目前只支援特定程式語言，每個 Lambda 的執行時間有限制(目前每次執行最長時間是 300秒)，可能不適合使用在需要建立 connection 的情境(i.e. mysql)</p>
+<p>我個人目前使用 AWS Lambda 的用途包含:</p>
+<ol>
+<li>定期從DB整理資料，丟到 logstash</li>
+<li>定期監測特定數據，符合條件時，發出 Slack 通知</li>
+<li>定期整理資料，將資料打包成 csv 丟到 S3</li>
+</ol>
+<p>將固定週期要執行的小程式，透過 CloudWatch Events 的設定，自動去執行 Lambda。</p>
+<hr>
+<h2 id="Apex-Introduction"><a href="#Apex-Introduction" class="headerlink" title="Apex Introduction"></a>Apex Introduction</h2><p><a href="https://github.com/apex/apex" target="_blank" rel="external">Apex</a> 的主要目的是協助我們管理 AWS Lambda 開發，包括打包 function 成 zip，上傳到S3、部署、查看特定 function 的log,使用 terraform 管理 Lambda 相關的 infrastructure。<br>Apex 主要是使用 Golang 開發，開發者包含知名的 TJ 大大。</p>
+<hr>
+<h2 id="開始你的第一個-lambda-function"><a href="#開始你的第一個-lambda-function" class="headerlink" title="開始你的第一個 lambda function"></a>開始你的第一個 lambda function</h2><p>這邊是程式碼的<a href="https://github.com/ocowchun/lambda101" target="_blank" rel="external">範例</a></p>
+<h3 id="安裝-apex"><a href="#安裝-apex" class="headerlink" title="安裝 apex"></a><a href="https://github.com/apex/apex#installation" target="_blank" rel="external">安裝 apex</a></h3><p>如果你的電腦室 OS X, Linux, 或是 OpenBSD:<br>你只要在 terminal 執行下面這一行就可以安裝了</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">curl https://raw.githubusercontent.com/apex/apex/master/install.sh | sh</div></pre></td></tr></table></figure>
+<p>如果你是 Windows 的用戶你可以透過<a href="https://github.com/apex/apex/releases" target="_blank" rel="external">下載binary</a>來安裝。</p>
+<p>如果你之前已經有安裝過的話，可以在 terminal 執行下面這個指令來更新</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">apex upgrade</div></pre></td></tr></table></figure>
+<p>本文章使用的 Apex 版本是 <code>0.9.0</code></p>
+<h3 id="1-建立專案資料夾"><a href="#1-建立專案資料夾" class="headerlink" title="1. 建立專案資料夾"></a>1. 建立專案資料夾</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div></pre></td><td class="code"><pre><div class="line">mkdir myproject &amp;&amp; <span class="built_in">cd</span> myproject</div><div class="line">apex init</div><div class="line"><span class="comment"># 他會詢問你專案名稱,專案敘述,這邊請各位朋友自行發揮</span></div><div class="line"><span class="comment"># 然後詢問你是否要使用 Terraform 來管理 infrastructure</span></div><div class="line"><span class="comment"># 我建議選擇 yes, 我們之後的範例會搭配 Terraform</span></div><div class="line"><span class="comment"># 然後他會要你選擇你需要的環境,這邊可以按照習慣的開發方式來選擇,記得至少要填寫 dev</span></div><div class="line"><span class="comment"># 接著會問你是否要將 Terraform 的狀態儲存到 S3 上，如果你有選擇搭配 Terraform的話 這邊建議選擇 yes</span></div></pre></td></tr></table></figure>
+<h3 id="1-1-安裝-Terraform-選配"><a href="#1-1-安裝-Terraform-選配" class="headerlink" title="1.1 安裝 Terraform (選配)"></a>1.1 安裝 Terraform (選配)</h3><p>Terraform是一個用來管理 AWS infrastructure 的工具(也可以管理其他雲端服務)，你可以把他想像成另外一個 AWS CloudFormation 。</p>
+<p>下面是安裝 Terraform 的網址<br><a href="https://www.terraform.io/downloads.html" target="_blank" rel="external">https://www.terraform.io/downloads.html</a></p>
+<h3 id="2-設定-AWS-credentials"><a href="#2-設定-AWS-credentials" class="headerlink" title="2. 設定 AWS credentials"></a>2. 設定 AWS credentials</h3><p>你的 User 會需要 <code>AWSLambdaFullAccess</code> 的權限</p>
+<h4 id="設定環境變數"><a href="#設定環境變數" class="headerlink" title="設定環境變數"></a>設定環境變數</h4><figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div></pre></td><td class="code"><pre><div class="line">$ <span class="built_in">export</span> AWS_ACCESS_KEY=AWS_account_access_key</div><div class="line">$ <span class="built_in">export</span> AWS_SECRET_KEY=AWS_account_secret_key</div><div class="line">$ <span class="built_in">export</span> AWS_REGION=AWS_region</div></pre></td></tr></table></figure>
+<p>或是用<a href="http://apex.run/#aws-credentials" target="_blank" rel="external">其他方法</a>來設定 AWS credentials</p>
+<h3 id="3-設定-AWS-role"><a href="#3-設定-AWS-role" class="headerlink" title="3. 設定 AWS role"></a>3. 設定 AWS role</h3><h4 id="方法一-手動建立-role"><a href="#方法一-手動建立-role" class="headerlink" title="方法一:手動建立 role"></a>方法一:手動建立 role</h4><h4 id="方法二-使用-Terraform"><a href="#方法二-使用-Terraform" class="headerlink" title="方法二: 使用 Terraform"></a>方法二: 使用 Terraform</h4><p>確認你有安裝 Terraform ，並且有設定好 AWS credentials ，同時 AWS credential有相對應的權限<br>為了方便測試可以先選擇 <code>AdministratorAccess</code>，不過實際開發的時候記得要設定好權限。</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">apex infra apply</div></pre></td></tr></table></figure>
+<h3 id="4-部署"><a href="#4-部署" class="headerlink" title="4. 部署"></a>4. 部署</h3><p>好了千辛萬苦之後終於要開始部署我們的 lambda function 了</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">apex deploy</div></pre></td></tr></table></figure>
+<h3 id="5-執行-lambda-function"><a href="#5-執行-lambda-function" class="headerlink" title="5. 執行 lambda function"></a>5. 執行 lambda function</h3><p>成功部署了 lambda function ，當然要趕快來測試一下才行，在 terminal 執行</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">apex invoke hello</div></pre></td></tr></table></figure>
+<p>你應該會看到 </p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">&#123;&quot;hello&quot;:&quot;world&quot;&#125;</div></pre></td></tr></table></figure>
+<p>如果你順利做到這邊，恭喜，你已經完成你的第一個 lambda function ，可以在你的履歷加上 serverless 這個技能。</p>
+<hr>
+<h2 id="專案架構"><a href="#專案架構" class="headerlink" title="專案架構"></a>專案架構</h2><p>這邊我們簡單講述一下 Apex 的專案架構，假設我有一個簡單的 Apex 專案長得像下面這樣:</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div></pre></td><td class="code"><pre><div class="line">project.json</div><div class="line">functions</div><div class="line">├── bar</div><div class="line">│   ├── function.json</div><div class="line">│   └── index.js</div><div class="line">└── foo</div><div class="line">    ├── function.json</div><div class="line">    └── index.js</div></pre></td></tr></table></figure>
+<h3 id="project-json"><a href="#project-json" class="headerlink" title="project.json"></a><a href="https://github.com/apex/apex/blob/master/docs/projects.md" target="_blank" rel="external">project.json</a></h3><p>每個 Apex 專案的根目錄都需要有一個 <code>project.json</code> ，這裡面會有專案的基本資料與設定，同時也會是每個 function 預設的設定。</p>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div></pre></td><td class="code"><pre><div class="line">&#123;</div><div class="line">  <span class="string">"name"</span>: <span class="string">"node"</span>,</div><div class="line">  <span class="string">"description"</span>: <span class="string">"Node.js example project"</span>,</div><div class="line">  <span class="string">"role"</span>: <span class="string">"arn:aws:iam::293503197324:role/lambda"</span>,</div><div class="line">  <span class="string">"memory"</span>: <span class="number">512</span></div><div class="line">&#125;</div></pre></td></tr></table></figure>
+<p>這裏我們可以設定專案的名字，這會影響到你在 AWS Lambda 裡面對應的 function name，如果你沒有使用  Terraform 的話，你會需要在這裏設定 role ，role 是實際執行 Lambda 時會對應到的角色，所以你可能會需要給他相關的權限，例如你的 Lambda 會需要讀取 DynamoDB，那你就會需要幫 role 設定相關的權限。詳細的設定可以看<a href="https://github.com/apex/apex/blob/master/docs/projects.md" target="_blank" rel="external">這裡</a></p>
+<h3 id="function"><a href="#function" class="headerlink" title="function"></a>function</h3><p>在 Apex 的架構下，<code>functions</code> 下的資料夾都會對應到一個 AWS Lambda，所以上述的情況，我會有 bar,foo 兩個 AWS Lambda 。</p>
+<h3 id="function-json"><a href="#function-json" class="headerlink" title="function.json"></a><a href="https://github.com/apex/apex/blob/master/docs/functions.md" target="_blank" rel="external">function.json</a></h3><p>除了 <code>project.json</code> 外，你可以在每個 function 資料夾底下建立 <code>function.json</code> ，來設定這個 function 詳細的設定可以看<a href="https://github.com/apex/apex/blob/master/docs/functions.md" target="_blank" rel="external">這裡</a></p>
+<h2 id="常用的-Apex-指令"><a href="#常用的-Apex-指令" class="headerlink" title="常用的 Apex 指令"></a>常用的 Apex 指令</h2><h3 id="apex-deploy"><a href="#apex-deploy" class="headerlink" title="apex deploy"></a>apex deploy</h3><p>將 <code>functions</code> 下的每一個 <code>function</code> 部署到 AWS Lambda</p>
+<h3 id="apex-list"><a href="#apex-list" class="headerlink" title="apex list"></a>apex list</h3><p>列出目前 AWS Lambda 上的 functions</p>
+<h3 id="apex-invoke"><a href="#apex-invoke" class="headerlink" title="apex invoke "></a>apex invoke <function-name></function-name></h3><p>執行指定的 function</p>
+<h3 id="apex-delete"><a href="#apex-delete" class="headerlink" title="apex delete "></a>apex delete <function-name></function-name></h3><p>刪除指定的 AWS Lambda function</p>
+<h3 id="apex-infra"><a href="#apex-infra" class="headerlink" title="apex infra"></a>apex infra</h3><p>使用 Terraform ，之後會分享使用方式。</p>
+<h3 id="apex-logs"><a href="#apex-logs" class="headerlink" title="apex logs"></a>apex logs</h3><p>顯示 AWS Lambda 執行的 log， 可以在後面指定 function name 例如 <code>apex logs hello</code> debug 很好用。</p>
+<h3 id="apex-metrics"><a href="#apex-metrics" class="headerlink" title="apex metrics"></a>apex metrics</h3><p>顯示 AWS Lambda 的相關數據，包含執行次數，錯誤…</p>
+<hr>
+<h2 id="使用-webpack-來打包-JavaScript"><a href="#使用-webpack-來打包-JavaScript" class="headerlink" title="使用 webpack 來打包 JavaScript"></a>使用 <a href="https://github.com/webpack/webpack" target="_blank" rel="external">webpack</a> 來打包 JavaScript</h2><p>接下來會討論如何在 Apex 裡面使用 webpack，畢竟 nodejs 的哲學就是要把全部的東西都拆成 package 麻<br>，所以我們會講解怎麼將你的 lambda function 使用到 package 打包起來。</p>
+<p>我們這裡使用除了打包 JavaScript 之外，也順便使用了 babel 來編譯你的 JavaScript ，這個年頭就是要寫 es6 才能顯得你是一個有跟上時代的工程師。</p>
+<p>這裏的範例是使用 <a href="https://github.com/request/request" target="_blank" rel="external">request</a> 對 <code>https://status.github.com/api/status.json</code> 發出請求，取得目前 GitHub的狀況。</p>
+<h3 id="1-首先在-project-json-加入"><a href="#1-首先在-project-json-加入" class="headerlink" title="1 首先在 project.json 加入"></a>1 首先在 <code>project.json</code> 加入</h3><figure class="highlight js"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div></pre></td><td class="code"><pre><div class="line"></div><div class="line"><span class="string">"handler"</span>: <span class="string">"lib.handle"</span>,</div><div class="line"><span class="string">"hooks"</span>: &#123;</div><div class="line">  <span class="string">"build"</span>: <span class="string">"../../node_modules/.bin/webpack --config ../../webpack.config.js"</span>,</div><div class="line">  <span class="string">"clean"</span>: <span class="string">"rm -fr lib"</span></div><div class="line">&#125;</div></pre></td></tr></table></figure>
+<h3 id="2-然後設定webpack-config-js"><a href="#2-然後設定webpack-config-js" class="headerlink" title="2. 然後設定webpack.config.js"></a>2. 然後設定<code>webpack.config.js</code></h3><figure class="highlight js"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div><div class="line">19</div><div class="line">20</div></pre></td><td class="code"><pre><div class="line"><span class="built_in">module</span>.exports = &#123;</div><div class="line">  <span class="attr">entry</span>: <span class="string">'./index.js'</span>,</div><div class="line">  <span class="attr">target</span>: <span class="string">'node'</span>,</div><div class="line">  <span class="attr">output</span>: &#123;</div><div class="line">    <span class="attr">path</span>: <span class="string">'./lib'</span>,</div><div class="line">    <span class="attr">filename</span>: <span class="string">'index.js'</span>,</div><div class="line">    <span class="attr">libraryTarget</span>: <span class="string">'commonjs2'</span></div><div class="line">  &#125;,</div><div class="line">  <span class="attr">module</span>: &#123;</div><div class="line">    <span class="attr">noParse</span>: [<span class="regexp">/validate\.js/</span>],</div><div class="line">    <span class="attr">loaders</span>: [&#123;</div><div class="line">      <span class="attr">test</span>: <span class="regexp">/\.js$/</span>,</div><div class="line">      <span class="attr">loader</span>: <span class="string">'babel'</span>,</div><div class="line">      <span class="attr">exclude</span>: [<span class="regexp">/node_modules/</span>]</div><div class="line">    &#125;, &#123;</div><div class="line">      <span class="attr">test</span>: <span class="regexp">/\.json$/</span>,</div><div class="line">      <span class="attr">loader</span>: <span class="string">'json-loader'</span></div><div class="line">    &#125;]</div><div class="line">  &#125;</div><div class="line">&#125;</div></pre></td></tr></table></figure>
+<h3 id="3-設定-package-json-並執行-npm-install"><a href="#3-設定-package-json-並執行-npm-install" class="headerlink" title="3. 設定 package.json 並執行 npm install"></a>3. 設定 <code>package.json</code> 並執行 <code>npm install</code></h3><figure class="highlight javascript"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div><div class="line">19</div><div class="line">20</div><div class="line">21</div><div class="line">22</div><div class="line">23</div><div class="line">24</div></pre></td><td class="code"><pre><div class="line">&#123;</div><div class="line">  <span class="string">"name"</span>: <span class="string">"your-project-name"</span>,</div><div class="line">  <span class="string">"version"</span>: <span class="string">"1.0.0"</span>,</div><div class="line">  <span class="string">"description"</span>: <span class="string">"your-project-description"</span>,</div><div class="line">  <span class="string">"scripts"</span>: &#123;</div><div class="line">    <span class="string">"test"</span>: <span class="string">"echo \"Error: no test specified\" &amp;&amp; exit 1"</span></div><div class="line">  &#125;,</div><div class="line">  <span class="string">"dependencies"</span>: &#123;</div><div class="line">    <span class="string">"bluebird"</span>: <span class="string">"^3.4.0"</span>,</div><div class="line">    <span class="string">"request"</span>: <span class="string">"^2.72.0"</span></div><div class="line">  &#125;,</div><div class="line">  <span class="string">"devDependencies"</span>: &#123;</div><div class="line">    <span class="string">"babel-loader"</span>: <span class="string">"^6.2.3"</span>,</div><div class="line">    <span class="string">"babel-plugin-syntax-async-functions"</span>: <span class="string">"^6.3.13"</span>,</div><div class="line">    <span class="string">"babel-plugin-transform-async-to-generator"</span>: <span class="string">"^6.4.6"</span>,</div><div class="line">    <span class="string">"babel-plugin-transform-regenerator"</span>: <span class="string">"^6.4.4"</span>,</div><div class="line">    <span class="string">"babel-plugin-transform-runtime"</span>: <span class="string">"^6.4.3"</span>,</div><div class="line">    <span class="string">"babel-preset-es2015"</span>: <span class="string">"^6.3.13"</span>,</div><div class="line">    <span class="string">"babel-preset-stage-0"</span>: <span class="string">"^6.3.13"</span>,</div><div class="line">    <span class="string">"json-loader"</span>: <span class="string">"^0.5.4"</span>,</div><div class="line">    <span class="string">"transform-loader"</span>: <span class="string">"^0.2.3"</span>,</div><div class="line">    <span class="string">"webpack"</span>: <span class="string">"^1.12.13"</span></div><div class="line">  &#125;</div><div class="line">&#125;</div></pre></td></tr></table></figure>
+<h3 id="4-新增-lib-github-js"><a href="#4-新增-lib-github-js" class="headerlink" title="4. 新增 lib/github.js"></a>4. 新增 <code>lib/github.js</code></h3><p>這邊就只是使用 <code>reqest</code> 取得 <code>https://status.github.com/api/status.json</code> 的內容。</p>
+<figure class="highlight js"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">let</span> request = <span class="built_in">require</span>(<span class="string">'request'</span>);</div><div class="line"><span class="keyword">let</span> <span class="built_in">Promise</span> = <span class="built_in">require</span>(<span class="string">'bluebird'</span>);</div><div class="line"></div><div class="line"><span class="keyword">export</span> <span class="function"><span class="keyword">function</span> <span class="title">getStatus</span>(<span class="params"></span>) </span>&#123;</div><div class="line">    <span class="keyword">return</span> <span class="keyword">new</span> <span class="built_in">Promise</span>(<span class="function"><span class="keyword">function</span>(<span class="params">resolve, reject</span>) </span>&#123;</div><div class="line">        request(<span class="string">'https://status.github.com/api/status.json'</span>, (error, response, body) =&gt; &#123;</div><div class="line">            <span class="keyword">if</span> (error) &#123;</div><div class="line">                reject(error);</div><div class="line">            &#125; <span class="keyword">else</span> &#123;</div><div class="line">                resolve(response.body)</div><div class="line">            &#125;</div><div class="line">        &#125;);</div><div class="line">    &#125;);</div><div class="line">&#125;</div></pre></td></tr></table></figure>
+<h3 id="5-新增-function-github-status-index-js"><a href="#5-新增-function-github-status-index-js" class="headerlink" title="5. 新增 function/github_status/index.js"></a>5. 新增 <code>function/github_status/index.js</code></h3><p>呼叫 <code>getStatus</code> 成功時回傳結果，失敗時回傳錯誤內容，執行 Lambda 時， <code>cb</code> 的第一個參數如果不是 <code>null</code> 就會視為執行失敗，反之則為執行成功，更多細節請看<a href="http://docs.aws.amazon.com/lambda/latest/dg/nodejs-prog-model-handler.html#nodejs-prog-model-handler-callback" target="_blank" rel="external">Using the Callback Parameter</a></p>
+<figure class="highlight js"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">import</span> &#123;getStatus&#125; <span class="keyword">from</span> <span class="string">'../../lib/github'</span>;</div><div class="line"></div><div class="line">exports.handle = <span class="function"><span class="keyword">function</span>(<span class="params">e, ctx, cb</span>) </span>&#123;</div><div class="line">    getStatus().then(<span class="function">(<span class="params">result</span>) =&gt;</span> cb(<span class="literal">null</span>, result)).catch(<span class="function">(<span class="params">err</span>) =&gt;</span> cb(err))</div><div class="line">&#125;</div></pre></td></tr></table></figure>
+<h3 id="6-新增-babelrc"><a href="#6-新增-babelrc" class="headerlink" title="6. 新增 .babelrc"></a>6. 新增 <code>.babelrc</code></h3><p>babel 的相關設定</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div></pre></td><td class="code"><pre><div class="line">&#123;</div><div class="line">  &quot;presets&quot;: [&quot;es2015&quot;, &quot;stage-0&quot;],</div><div class="line">  &quot;plugins&quot;: [&quot;transform-runtime&quot;, &quot;transform-regenerator&quot;, &quot;syntax-async-functions&quot;, &quot;transform-async-to-generator&quot;]</div><div class="line">&#125;</div></pre></td></tr></table></figure>
+<h3 id="7-部署"><a href="#7-部署" class="headerlink" title="7. 部署"></a>7. 部署</h3><p>我們現在已經完成一個新的 function 叫做 <code>github_status</code> ，然後我們一樣在 terminal 執行 <code>apex deploy</code> 來部署我們的新 function，最後執行 <code>apex invoke github_status</code> 就可以看到這個 function 的執行結果。</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div></pre></td><td class="code"><pre><div class="line">apex invoke github_status</div><div class="line"><span class="comment">#"&#123;\"status\":\"good\",\"last_updated\":\"2016-05-28T13:57:18Z\"&#125;"</span></div></pre></td></tr></table></figure>
+<h2 id="結論"><a href="#結論" class="headerlink" title="結論"></a>結論</h2><p>在這邊我們簡單敘述了如何建立使用 apex 來開發 AWS Lambda ，撇除一開始的麻煩設定，接下來當你需要建立新的 function 的時候，你只需要在 <code>functions</code> 下建立對應的 <code>function_name</code> 資料夾，完成你的程式碼，然後執行 <code>apex deploy</code> 就可以了。</p>
+<p>我覺得 Apex 搭配 AWS Lambda 是一個可以讓你真正專注在開發程式，而不需要花費心力去管理系統營運的開發方式，當然他也有許許多多麻煩的地方，我會在之後跟大家分享。</p>
+<h2 id="References"><a href="#References" class="headerlink" title="References"></a>References</h2><ul>
+<li><a href="http://docs.aws.amazon.com/lambda/latest/dg/welcome.html" target="_blank" rel="external">AWS Lambda  Developer Guide</a></li>
+<li><a href="https://github.com/apex/apex" target="_blank" rel="external">Apex</a></li>
+<li><a href="https://www.terraform.io/docs/providers/aws/index.html" target="_blank" rel="external">Terraform</a></li>
+<li><a href="http://abalone0204.github.io/2016/05/22/serverless-simple-crud/" target="_blank" rel="external">淺析 serverless 架構與實作</a></li>
+<li><a href="https://vinta.ws/code/aws-lambda-notes.html" target="_blank" rel="external">AWS Lambda notes</a></li>
+</ul>
+]]></content>
+    
+    <summary type="html">
+    
+      &lt;p&gt;本文將簡單分享如何快速的開發 &lt;a href=&quot;https://aws.amazon.com/tw/documentation/lambda/&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;AWS Lambda&lt;/a&gt;&lt;br&gt;使用的語言為 JavaScri
+    
+    </summary>
+    
+    
+      <category term="Lambda" scheme="https://blog.ocowchun.com/tags/Lambda/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>hexo101</title>
+    <link href="https://blog.ocowchun.com/2016/05/15/hexo101/"/>
+    <id>https://blog.ocowchun.com/2016/05/15/hexo101/</id>
+    <published>2016-05-15T12:49:55.000Z</published>
+    <updated>2016-11-16T14:40:11.000Z</updated>
+    
+    <content type="html"><![CDATA[<p>最近想要開始來寫點技術相關的文章，本來想使用 <a href="https://medium.com/" target="_blank" rel="external">medium</a>，可是他本身不支援 markdown，剛好看到 <a href="http://abalone0204.github.io/" target="_blank" rel="external">abalone0204</a> 使用的 <a href="https://hexo.io/zh-tw/" target="_blank" rel="external">Hexo</a>，就順手研究了一下，感覺還蠻適合拿來寫技術文章的，希望可以持續下去，雖然網路上介紹關於如何使用 Hexo架站的分享很多，不過還是遇上不少問題，像是如何安裝主題、public 與 source code 的 branch 要怎麼分，所以整理了一下 Hexo 常用的指令。</p>
+<h2 id="安裝-Hexo"><a href="#安裝-Hexo" class="headerlink" title="安裝 Hexo"></a><a href="https://hexo.io/zh-tw/docs/index.html" target="_blank" rel="external">安裝 Hexo</a></h2><figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">$ npm install -g hexo-cli</div></pre></td></tr></table></figure>
+<h2 id="建立資料夾"><a href="#建立資料夾" class="headerlink" title="建立資料夾"></a><a href="https://hexo.io/zh-tw/docs/setup.html" target="_blank" rel="external">建立資料夾</a></h2><figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div></pre></td><td class="code"><pre><div class="line">$ hexo init &lt;folder&gt;</div><div class="line">$ <span class="built_in">cd</span> &lt;folder&gt;</div><div class="line">$ npm install</div></pre></td></tr></table></figure>
+<h2 id="新增文章"><a href="#新增文章" class="headerlink" title="新增文章"></a><a href="https://hexo.io/zh-tw/docs/writing.html" target="_blank" rel="external">新增文章</a></h2><figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">$ hexo new [layout] &lt;title&gt;</div></pre></td></tr></table></figure>
+<h2 id="更換主題-themes"><a href="#更換主題-themes" class="headerlink" title="更換主題(themes)"></a>更換主題(themes)</h2><p>以 <a href="https://github.com/DrakeLeung/hexo-theme-again" target="_blank" rel="external">again</a> 為例</p>
+<h4 id="1-下載主題"><a href="#1-下載主題" class="headerlink" title="1. 下載主題"></a>1. 下載主題</h4><figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">$ git submodule add https://github.com/DrakeLeung/hexo-theme-again.git themes/again</div></pre></td></tr></table></figure>
+<h4 id="2-設定config"><a href="#2-設定config" class="headerlink" title="2. 設定config"></a>2. 設定config</h4><figure class="highlight yml"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line"><span class="attr">theme:</span> again</div></pre></td></tr></table></figure>
+<h2 id="路徑設定"><a href="#路徑設定" class="headerlink" title="路徑設定"></a><a href="https://hexo.io/docs/configuration.html#URL" target="_blank" rel="external">路徑設定</a></h2><p>根據部落格的網址來設置根目錄(root)，不然會讀取不到靜態資源。</p>
+<p>一般的網址都是根目錄(i.e. <code>https://blog.example.com</code>)，所以 <code>root</code> 就設定為 <code>/</code>。如果你的部落格是放在子目錄(例如本部落格)，那就要設定對應的 <code>root</code> ，以本部落格為例，首頁是 <code>www.ocowchun.com/blog</code> ，所以 <code>root</code> 要設定為 <code>/blog/</code>。</p>
+<figure class="highlight yml"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div></pre></td><td class="code"><pre><div class="line"><span class="attr">url:</span> http://www.ocowchun.com/blog</div><div class="line"><span class="attr">root:</span> /blog/</div></pre></td></tr></table></figure>
+<h2 id="部署到-github-pages"><a href="#部署到-github-pages" class="headerlink" title="部署到 github pages"></a>部署到 github pages</h2><blockquote>
+<p>我目前是將 source code 放在 <code>master</code> branch，然後另外開 <code>gh-pages</code> ，來放置 public 的檔案。</p>
+</blockquote>
+<h4 id="1-設定-config"><a href="#1-設定-config" class="headerlink" title="1. 設定 config"></a>1. 設定 config</h4><figure class="highlight yml"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div></pre></td><td class="code"><pre><div class="line"><span class="attr">deploy:</span></div><div class="line"><span class="attr">  type:</span> git</div><div class="line"><span class="attr">  repo:</span> git@github.com:your-name/your-repo.git</div><div class="line"><span class="attr">  branch:</span> gh-pages</div></pre></td></tr></table></figure>
+<h4 id="2-執行下面指令進行部署"><a href="#2-執行下面指令進行部署" class="headerlink" title="2. 執行下面指令進行部署"></a>2. 執行下面指令進行部署</h4><figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">$ hexo deploy --generate</div></pre></td></tr></table></figure>
+]]></content>
+    
+    <summary type="html">
+    
+      &lt;p&gt;最近想要開始來寫點技術相關的文章，本來想使用 &lt;a href=&quot;https://medium.com/&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;medium&lt;/a&gt;，可是他本身不支援 markdown，剛好看到 &lt;a href=&quot;http://aba
+    
+    </summary>
+    
+    
+      <category term="Hexo" scheme="https://blog.ocowchun.com/tags/Hexo/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>使用 Fluentd 協助整理 log</title>
+    <link href="https://blog.ocowchun.com/2016/05/14/use-fluent-to-handle-log/"/>
+    <id>https://blog.ocowchun.com/2016/05/14/use-fluent-to-handle-log/</id>
+    <published>2016-05-14T15:38:55.000Z</published>
+    <updated>2016-11-16T14:40:11.000Z</updated>
+    
+    <content type="html"><![CDATA[<h2 id="Quick-Install"><a href="#Quick-Install" class="headerlink" title="Quick Install"></a>Quick Install</h2><h3 id="before-install"><a href="#before-install" class="headerlink" title="before-install"></a>before-install</h3><h4 id="Increase-Max-of-File-Descriptors"><a href="#Increase-Max-of-File-Descriptors" class="headerlink" title="Increase Max # of File Descriptors"></a>Increase Max # of File Descriptors</h4><p>Please increase the maximum number of file descriptors. You can check the current number using the ulimit -n command.</p>
+<figure class="highlight sh"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">$ <span class="built_in">ulimit</span> -n</div></pre></td></tr></table></figure>
+<p>If your console shows 1024, it is insufficient. Please add following lines to your /etc/security/limits.conf file and reboot your machine.</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div></pre></td><td class="code"><pre><div class="line">root soft nofile 65536</div><div class="line">root hard nofile 65536</div><div class="line">* soft nofile 65536</div><div class="line">* hard nofile 65536</div></pre></td></tr></table></figure>
+<h3 id="Step-1-Install-from-Apt-Repository"><a href="#Step-1-Install-from-Apt-Repository" class="headerlink" title="Step 1 : Install from Apt Repository"></a>Step 1 : Install from Apt Repository</h3><p>For Ubuntu, “Ubuntu 14.04 LTS / Trusty”, “Ubuntu 12.04 LTS / Precise” and “Ubuntu 10.04 LTS / Lucid” are currently supported.</p>
+<figure class="highlight sh"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">curl -L http://toolbelt.treasuredata.com/sh/install-ubuntu-trusty-td-agent2.sh | sh</div></pre></td></tr></table></figure>
+<h3 id="Step2-Launch-Daemon"><a href="#Step2-Launch-Daemon" class="headerlink" title="Step2: Launch Daemon"></a>Step2: Launch Daemon</h3><p>The /etc/init.d/td-agent script is provided to start, stop, or restart the agent.<br><figure class="highlight sh"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div></pre></td><td class="code"><pre><div class="line">$ sudo /etc/init.d/td-agent restart</div><div class="line">$ sudo /etc/init.d/td-agent status</div><div class="line">td-agent (pid  21678) is running..</div></pre></td></tr></table></figure></p>
+<p>Please make sure your configuration file is located at /etc/td-agent/td-agent.conf.</p>
+<h3 id="Step3-Post-Sample-Logs-via-HTTP"><a href="#Step3-Post-Sample-Logs-via-HTTP" class="headerlink" title="Step3: Post Sample Logs via HTTP"></a>Step3: Post Sample Logs via HTTP</h3><p>By default, /etc/td-agent/td-agent.conf is configured to take logs from HTTP and route them to stdout (/var/log/td-agent/td-agent.log). You can post sample log records using the curl command.</p>
+<figure class="highlight sh"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">$ curl -X POST <span class="_">-d</span> <span class="string">'json=&#123;"json":"message"&#125;'</span> http://localhost:8888/debug.test</div></pre></td></tr></table></figure>
+<h2 id="Config-Introduction"><a href="#Config-Introduction" class="headerlink" title="Config Introduction"></a><a href="http://docs.fluentd.org/articles/config-file" target="_blank" rel="external">Config Introduction</a></h2><ol>
+<li><strong>source</strong> directives determine the input sources.</li>
+<li><strong>match</strong> directives determine the output destinations.</li>
+<li><strong>include</strong> directives include other files.</li>
+<li><strong>system</strong> directives set system wide configuration.</li>
+</ol>
+<h3 id="source-where-all-the-data-come-from"><a href="#source-where-all-the-data-come-from" class="headerlink" title="source:where all the data come from"></a>source:where all the data come from</h3><p>設定要輸入的log<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div></pre></td><td class="code"><pre><div class="line">&lt;source&gt;</div><div class="line">  type forward</div><div class="line">  port 24224</div><div class="line">&lt;/source&gt;</div></pre></td></tr></table></figure></p>
+<p>source directive一定要包含<code>type</code>參數,<code>type</code>會決定要使用哪個input plugin</p>
+<h3 id="match-Tell-fluentd-what-to-do"><a href="#match-Tell-fluentd-what-to-do" class="headerlink" title="match:Tell fluentd what to do!"></a>match:Tell fluentd what to do!</h3><p>通常用於將event輸出到其他系統(eg:file,hdfs,s3…etc)<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div></pre></td><td class="code"><pre><div class="line">&lt;match myapp.access&gt;</div><div class="line">  type file</div><div class="line">  path /var/log/fluent/access</div><div class="line">&lt;/match&gt;</div></pre></td></tr></table></figure></p>
+<p>match directive一定要包含match pattern與<code>type</code>參數<br><code>match pattern</code>決定有些資料需要輸出,<code>type</code>會決定要使用哪個output plugin</p>
+<h4 id="match-pattern"><a href="#match-pattern" class="headerlink" title="match pattern"></a><a href="http://docs.fluentd.org/articles/config-file#match-pattern-how-you-control-the-event-flow-inside-fluentd" target="_blank" rel="external">match pattern</a></h4><h2 id="tail-log-101"><a href="#tail-log-101" class="headerlink" title="tail log 101"></a>tail log 101</h2><h3 id="tail-Rails-log"><a href="#tail-Rails-log" class="headerlink" title="tail Rails log"></a>tail Rails log</h3><h4 id="1-add-below-to-Gemfile"><a href="#1-add-below-to-Gemfile" class="headerlink" title="1. add below to Gemfile"></a>1. add below to <code>Gemfile</code></h4><figure class="highlight rb"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div></pre></td><td class="code"><pre><div class="line">gem <span class="string">'lograge'</span></div><div class="line">gem <span class="string">"logstash-event"</span></div></pre></td></tr></table></figure>
+<h4 id="2-add-below-to-config-application-rb"><a href="#2-add-below-to-config-application-rb" class="headerlink" title="2. add below to config/application.rb"></a>2. add below to <code>config/application.rb</code></h4><figure class="highlight rb"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div></pre></td><td class="code"><pre><div class="line">config.lograge.enabled = <span class="literal">true</span></div><div class="line">config.lograge.formatter = Lograge::Formatters::Logstash.new</div></pre></td></tr></table></figure>
+<h4 id="3-comment-config-environments-production-rb-log-formatter"><a href="#3-comment-config-environments-production-rb-log-formatter" class="headerlink" title="3. comment config/environments/production.rb log_formatter"></a>3. comment <code>config/environments/production.rb</code> log_formatter</h4><figure class="highlight rb"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line"><span class="comment"># config.log_formatter = ::Logger::Formatter.new</span></div></pre></td></tr></table></figure>
+<h4 id="4-add-lograge-to-Gemfile"><a href="#4-add-lograge-to-Gemfile" class="headerlink" title="4. add lograge to Gemfile"></a>4. add <code>lograge</code> to <code>Gemfile</code></h4><figure class="highlight rb"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div></pre></td><td class="code"><pre><div class="line">gem <span class="string">'lograge'</span></div><div class="line"><span class="string">``</span><span class="string">` </span></div><div class="line"></div><div class="line">#### 5. add this line to `config/environments/production.rb<span class="string">`</span></div><div class="line">`<span class="string">``</span>rb</div><div class="line">    config.lograge.formatter = Lograge::Formatters::Logstash.new</div></pre></td></tr></table></figure>
+<h4 id="6-add-below-to-td-agent-conf"><a href="#6-add-below-to-td-agent-conf" class="headerlink" title="6. add below to td-agent.conf"></a>6. add below to <code>td-agent.conf</code></h4><figure class="highlight plain"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div></pre></td><td class="code"><pre><div class="line">&lt;source&gt;</div><div class="line">  type tail</div><div class="line">  path /home/vagrant/apps/your-rails-app/shared/log/production.log</div><div class="line">  tag debug.test</div><div class="line">  format json</div><div class="line">&lt;/source&gt;</div></pre></td></tr></table></figure>
+<h3 id="tail-nginx-log"><a href="#tail-nginx-log" class="headerlink" title="tail nginx log"></a>tail nginx log</h3><figure class="highlight plain"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div></pre></td><td class="code"><pre><div class="line">&lt;source&gt;</div><div class="line">  type tail</div><div class="line">  path /var/log/nginx/access.log</div><div class="line">  tag debug.test</div><div class="line">  format nginx</div><div class="line">&lt;/source&gt;</div></pre></td></tr></table></figure>
+<h2 id="integrate-fluent-with-kibana"><a href="#integrate-fluent-with-kibana" class="headerlink" title="integrate fluent with kibana"></a>integrate fluent with kibana</h2><h3 id="1-install-kibana"><a href="#1-install-kibana" class="headerlink" title="1. install kibana"></a>1. install kibana</h3><h4 id="1-1-download-and-extract-kibana"><a href="#1-1-download-and-extract-kibana" class="headerlink" title="1.1 download and extract kibana"></a>1.1 download and extract kibana</h4><figure class="highlight sh"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div></pre></td><td class="code"><pre><div class="line">$ curl -O http://download.elastic.co/kibana/kibana/kibana-4.1.0-snapshot-linux-x64.tar.gz</div><div class="line">$ tar cvf kibana-4.1.0-snapshot-linux-x64.tar.gz</div></pre></td></tr></table></figure>
+<h4 id="1-2-install-pm2"><a href="#1-2-install-pm2" class="headerlink" title="1.2 install pm2"></a>1.2 install pm2</h4><figure class="highlight sh"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">$ sudo npm install -g pm2</div></pre></td></tr></table></figure>
+<h4 id="1-3-edit-config-kibana-yml-in-kibana-4-1-0-snapshot-linux-x64"><a href="#1-3-edit-config-kibana-yml-in-kibana-4-1-0-snapshot-linux-x64" class="headerlink" title="1.3 edit config/kibana.yml in kibana-4.1.0-snapshot-linux-x64"></a>1.3 edit <code>config/kibana.yml</code> in <code>kibana-4.1.0-snapshot-linux-x64</code></h4><figure class="highlight yml"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line"><span class="attr">elasticsearch_url:</span> <span class="string">"http://your-elasticsearch-url:9200"</span></div></pre></td></tr></table></figure>
+<h4 id="1-4-add-kibana-process-json-to-kibana-folder"><a href="#1-4-add-kibana-process-json-to-kibana-folder" class="headerlink" title="1.4 add kibana-process.json to kibana folder"></a>1.4 add <code>kibana-process.json</code> to kibana folder</h4><figure class="highlight js"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div></pre></td><td class="code"><pre><div class="line">&#123;</div><div class="line">  <span class="string">"script"</span>: <span class="string">"./src/bin/kibana.js"</span>,</div><div class="line">  <span class="string">"max_memory_restart"</span>: <span class="string">"100M"</span>,</div><div class="line">  <span class="string">"env"</span>: &#123;</div><div class="line">    <span class="string">"NODE_ENV"</span>: <span class="string">"production"</span>,</div><div class="line">    <span class="string">"CONFIG_PATH"</span>: <span class="string">"./config/kibana.yml"</span></div><div class="line">  &#125;</div><div class="line">&#125;</div></pre></td></tr></table></figure>
+<h4 id="1-5-start-kibana"><a href="#1-5-start-kibana" class="headerlink" title="1.5 start kibana"></a>1.5 start kibana</h4><figure class="highlight plain"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">$ pm2 start kibana-process.json</div></pre></td></tr></table></figure>
+<h3 id="2-setting-elasticsearch"><a href="#2-setting-elasticsearch" class="headerlink" title="2. setting elasticsearch"></a>2. setting elasticsearch</h3><p>修改<code>elasticsearch.yml</code>,設定<code>http.cors.enabled</code>為true<br><figure class="highlight yml"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">http.cors.enabled: <span class="literal">true</span></div></pre></td></tr></table></figure></p>
+<h3 id="3-install-Elasticsearch-plugin-for-td-agent"><a href="#3-install-Elasticsearch-plugin-for-td-agent" class="headerlink" title="3. install  Elasticsearch plugin for td-agent"></a>3. install  Elasticsearch plugin for td-agent</h3><figure class="highlight sh"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div></pre></td><td class="code"><pre><div class="line">sudo apt-get install libcurl4-openssl-dev</div><div class="line">sudo /usr/sbin/td-agent-gem install fluent-plugin-elasticsearch</div></pre></td></tr></table></figure>
+<h3 id="4-edittd-agent-conf-send-nginx-log-to-elastic-search"><a href="#4-edittd-agent-conf-send-nginx-log-to-elastic-search" class="headerlink" title="4. edittd-agent.conf,send nginx log to elastic search"></a>4. edit<code>td-agent.conf</code>,send nginx log to elastic search</h3><p><a href="http://docs.fluentd.org/recipe/nginx/elasticsearch" target="_blank" rel="external">link</a><br><figure class="highlight plain"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div></pre></td><td class="code"><pre><div class="line">&lt;source&gt;</div><div class="line">  type tail</div><div class="line">  path /var/log/httpd-access.log #...or where you placed your Apache access log</div><div class="line">  pos_file /var/log/td-agent/httpd-access.log.pos # This is where you record file position</div><div class="line">  tag nginx.access #fluentd tag!</div><div class="line">  format nginx # Do you have a custom format? You can write your own regex.</div><div class="line">&lt;/source&gt;</div><div class="line"></div><div class="line">&lt;match **&gt;</div><div class="line">  type elasticsearch</div><div class="line">  logstash_format true</div><div class="line">  host &lt;hostname&gt; #(optional; default=&quot;localhost&quot;)</div><div class="line">  port &lt;port&gt; #(optional; default=9200)</div><div class="line">  index_name &lt;index name&gt; #(optional; default=fluentd)</div><div class="line">  type_name &lt;type name&gt; #(optional; default=fluentd)</div><div class="line">&lt;/match&gt;</div></pre></td></tr></table></figure></p>
+<p>這樣就可以使用kibana來檢視log</p>
+<p><a href="http://docs.fluentd.org/articles/before-install" target="_blank" rel="external">before-install</a><br><a href="http://docs.fluentd.org/articles/config-file" target="_blank" rel="external">config-file</a><br><a href="http://docs.fluentd.org/articles/config-file#match-pattern-how-you-control-the-event-flow-inside-fluentd" target="_blank" rel="external">match pattern</a></p>
+]]></content>
+    
+    <summary type="html">
+    
+      &lt;h2 id=&quot;Quick-Install&quot;&gt;&lt;a href=&quot;#Quick-Install&quot; class=&quot;headerlink&quot; title=&quot;Quick Install&quot;&gt;&lt;/a&gt;Quick Install&lt;/h2&gt;&lt;h3 id=&quot;before-install&quot;&gt;&lt;a hr
+    
+    </summary>
+    
+    
+      <category term="Fluentd" scheme="https://blog.ocowchun.com/tags/Fluentd/"/>
+    
+      <category term="Log" scheme="https://blog.ocowchun.com/tags/Log/"/>
+    
+  </entry>
+  
+</feed>

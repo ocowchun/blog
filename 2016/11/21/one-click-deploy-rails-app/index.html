@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>一鍵部署 Rails App | ocowchun</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <link rel="shortcut icon" href="/favicon.ico">
+  <link rel="stylesheet" href="/css/app.css">
+  <!-- <link rel='stylesheet' href='http://fonts.useso.com/css?family=Source+Code+Pro'> -->
+</head>
+
+<body>
+  <nav class="app-nav">
+  
+      
+        <a class="active" href="/.">home</a>
+        
+
+      
+  
+      
+        <a href="/archives">archive</a>
+      
+  
+      
+        <a href="/about">about</a>
+      
+  
+      
+        <a href="/atom.xml">rss</a>
+      
+  
+</nav>
+
+  <main class="post">
+  <article>
+  <h1 class="article-title">
+    <a href="/2016/11/21/one-click-deploy-rails-app/">一鍵部署 Rails App</a>
+  </h1>
+
+  <section class="article-meta">
+    <p class="article-date">十一月 21 2016</p>
+  </section>
+
+  <section class="article-entry">
+    <p>本文主要是跟大家分享 <a href="https://sudo.com.tw/" target="_blank" rel="external">Sudo</a> 如何實作一鍵部署 Rails App </p>
+<h2 id="背景介紹"><a href="#背景介紹" class="headerlink" title="背景介紹"></a>背景介紹</h2><p>Sudo 的網站是使用 <a href="http://rubyonrails.org/" target="_blank" rel="external">Ruby on Rails</a> 開發並架設在 <a href="https://aws.amazon.com/tw/ec2/" target="_blank" rel="external">Amazon EC2</a> 上，以前是用 <a href="http://capistranorb.com/" target="_blank" rel="external">Capistrano</a> 來部署網站， Capistrano 官方的文件寫得很爛，詳細的使用方式主要是參考 <a href="https://leanpub.com/deploying_rails_applications" target="_blank" rel="external">Reliably Deploying Rails Applications</a> 這本書。</p>
+<p>使用 Capistrano 的缺點在於比較不容易去變動機器的數量，另外每次部署的時候都是去變動原本機器的內容，有時候難免會發生一些奇怪的靈異現象，為了增加部署的速度，可以快速地調整需要的機器數，同時擁有相對乾淨的執行環境，所以我們在今年九月開始決定要實作新的部署流程(沒想到剛做完沒多久就宣布要關站了 = =)。</p>
+<p>一開始的想法是想要 code commit 到 master branch 並且通過測試後，CI 會將最新的 code 打包成一個 image ，丟到 <a href="https://aws.amazon.com/tw/autoscaling/" target="_blank" rel="external">Auto Scaling group</a> 後，去變動 <a href="https://aws.amazon.com/tw/elasticloadbalancing/" target="_blank" rel="external">ELB</a>，聽起來好像也還好，不過實際下去做的時候才發現了不少問題，這篇文章就是我們實作這個部署流程的相關紀錄，希望可以幫助到需要的朋友。</p>
+<h2 id="核心概念"><a href="#核心概念" class="headerlink" title="核心概念"></a>核心概念</h2><h3 id="1-建置-Image"><a href="#1-建置-Image" class="headerlink" title="1. 建置 Image"></a>1. 建置 Image</h3><h3 id="2-動態更新組態檔案-config"><a href="#2-動態更新組態檔案-config" class="headerlink" title="2. 動態更新組態檔案(config)"></a>2. 動態更新組態檔案(config)</h3><h3 id="3-Deployment"><a href="#3-Deployment" class="headerlink" title="3. Deployment"></a>3. Deployment</h3><h2 id="建置-Image"><a href="#建置-Image" class="headerlink" title="建置 Image"></a>建置 Image</h2><p>個人覺得這是整個部署流程中最麻煩的部分，Image 建置有做好，後面的問題都不大，同時這也是差異最多的部分，因為每個 Application 需要打包的內容都不一樣，所以需要花一些時間去研究與測試。</p>
+<p>建置 Image 就是把所有需要的服務與 Application 的程式碼都包進去。<br>通常會包含以下幾種</p>
+<ol>
+<li>Application Sourece Code (i.e. 你的 Rails App)</li>
+<li>Application 的執行語言 (i.e. Ruby)</li>
+<li>Web Server (Nginx/Apache)</li>
+<li>data collector (Fluentd, Logstash, etc)</li>
+<li>monitor (Datadog, New Relic, etc)</li>
+<li>Service Discovery (Consul, etcd)</li>
+<li>monit</li>
+</ol>
+<p>建置 Image 的方式有很多種，你可以手動 ssh 進去機器然後一個指令一個指令下，或是寫 Shell Script ，不過在這個 DevOps 的時代，大家通常會使用一些更方便的工具來協助建置，比如說 <a href="https://www.chef.io/chef/" target="_blank" rel="external">Chef</a>、<a href="https://www.ansible.com/" target="_blank" rel="external">Ansible</a>、<a href="https://puppet.com/" target="_blank" rel="external">Puppet</a> ，詳細的差別我沒有特別研究，我只知道 Chef 是使用 Ruby 編寫，Ansible 好像執行速度很快(Steam 勸敗一哥 Henry 說的)</p>
+<p>在 Sudo 我們主要是使用 Chef 去建置環境，建置完成之後需要打包環境方便之後使用，除了各家雲端服務內建的打包服務外，你可以透過 <a href="https://www.packer.io/" target="_blank" rel="external">Packer</a> 來完成這項工作， Packer 可以將你的環境根據設定打包成對應的 Image ，支援 Amazon EC2, DigitalOcean, Google Compute Engine, Microsoft Azure, etc</p>
+<p>詳細的內容可以參考我們家 Steam 勸敗一哥 Henry 的文章 <a href="https://henry40408-blog.herokuapp.com/kitchen-and-packer/" target="_blank" rel="external">Kitchen 與 Packer 實戰</a></p>
+<h2 id="動態更新組態檔案"><a href="#動態更新組態檔案" class="headerlink" title="動態更新組態檔案"></a>動態更新組態檔案</h2><p>接下來是談動態更新組態檔案，在我們的應用程式裡面會有許多的設定比如 Facebook App ID, Database URL, etc 機器本身也會有需多的設定，例如第三方服務的 URL, License, etc <a href="https://12factor.net/config" target="_blank" rel="external">12-Factor App</a> 提到不要將 config 寫死在 code 裡面，亦或是寫死在機器裡面。</p>
+<p>將組態設定抽離出來，啟動 Image 再注入有許多的好處:</p>
+<ol>
+<li>不需要因為組態設定改變重新打包 Image</li>
+<li>不同 Stage 的 Application 可以盡可能地共用同一個 Image</li>
+<li>更進一步的是當組態設定變動後，自動去更新到相關的機器，然後重啟對應的服務。</li>
+</ol>
+<p><a href="https://www.consul.io" target="_blank" rel="external">Consul</a> 是一個很方便的工具，可以用來作 Health Check, Service Discovery, Key Value Store</p>
+<p><a href="https://github.com/hashicorp/consul-template" target="_blank" rel="external">Consul Template</a>: 使用 Consul 的 Key Value Store 產生檔案的工具，很適合用來變動設定檔，當 Consul Key Value 變動的時候，會去調整對應的 template 產生新的 config ，然後重啟相關的服務。</p>
+<p>做法就是在 Image 裡面包入 Consul, Consul Template 還有相關的設定，Instance 啟動時，會自動去尋找 Consul Server，找到之後 Consul Template 就會根據 Consul Key Value Store 去產生對應的 config ，當你需要變動設定檔的時候，你只需要在 Key Value Store 變動， Consul Template 就會自動產生新的設定重啟相關的服務，使用這樣的方式就可以簡單完成組態設定的相關操作。</p>
+<h2 id="Deployment"><a href="#Deployment" class="headerlink" title="Deployment"></a>Deployment</h2><p>我們目前的做法建立兩個 ASG(ASG1, ASG2)，將 ASG2 註冊到 ELB 然後把 ASG1 移掉，不過這樣的做法會有個問題在於 ASG2 裡面的 instance 需要先通過 ELB 的 health check, ELB 才會開始將流量導向 instance。</p>
+<p><blockquote class="imgur-embed-pub" lang="en" data-id="a/Hsg3Q"><a href="//imgur.com/Hsg3Q"></a></blockquote><script async src="//s.imgur.com/min/embed.js" charset="utf-8"></script></p>
+<p>雖然很多人覺得從 Slack 打指令來部署很潮，不過我自己是連打指令都很懶，所以我們是自己另外做了一個網站來部署，每當一個新的 Image 打包好的時候，就會自動部署到 staging 同時在 Slack 跳通知，如果我們想要部署到 production 的話，就點擊通知上的連結去執行部署的操作。</p>
+<p><blockquote class="imgur-embed-pub" lang="en" data-id="a/eyUU1"><a href="//imgur.com/eyUU1"></a></blockquote><script async src="//s.imgur.com/min/embed.js" charset="utf-8"></script></p>
+<h3 id="Reference"><a href="#Reference" class="headerlink" title="Reference:"></a>Reference:</h3><ul>
+<li><p><a href="http://docs.aws.amazon.com/opsworks/latest/userguide/best-deploy.html#best-deploy-environments-blue-green" target="_blank" rel="external">Using a Blue-Green Deployment Strategy in AWS</a><br>雖然裡面用的是 opsWork 不過許多概念都相通</p>
+</li>
+<li><p><a href="http://www.slideshare.net/AmazonWebServices/dvo401-deep-dive-into-bluegreen-deployments-on-aws" target="_blank" rel="external">Deep Dive into Blue/Green Deployments on AWS</a><br>很棒的投影片，分享了從不同 level 去執行 blue green deployment 的優缺點</p>
+</li>
+<li><p><a href="https://d0.awsstatic.com/whitepapers/AWS_Blue_Green_Deployments.pdf" target="_blank" rel="external">Blue/Green Deployments on AWS</a></p>
+</li>
+</ul>
+
+  </section>
+</article>
+
+  <div class="sharing grid">
+  <section class="profile grid-item grid">
+    <img class="avatar" src="https://www.gravatar.com/avatar/a7da45a4a1667717721e9a81d66845ff" alt="avatar" />
+    <div class="grid-item">
+      <p class="title"> ocowchun </p>
+      <p class="subtitle"> yoyoyo </p>
+    <div>
+  </section>
+
+  <section class="share-btns">
+    <!-- <p> share it if you like it~ </p> -->
+    <a
+  class="twitter-share-button"
+  data-size="large"
+  data-via="ocowchun"
+  href="https://twitter.com/intent/tweet?text=本文主要是跟大家分享 <a href=""
+>
+  Tweet
+</a>
+
+<script>
+  window.twttr = (function(d, s, id) {
+  var js, fjs = d.getElementsByTagName(s)[0],
+    t = window.twttr || {};
+  if (d.getElementById(id)) return t;
+  js = d.createElement(s);
+  js.id = id;
+  js.src = "https://platform.twitter.com/widgets.js";
+  js.async = true;
+  fjs.parentNode.insertBefore(js, fjs);
+
+  t._e = [];
+  t.ready = function(f) {
+    t._e.push(f);
+  };
+
+  return t;
+}(document, "script", "twitter-wjs"));
+</script>
+
+  </section>
+</div>
+
+
+  
+    
+<section class="article-comment">
+  <div id="disqus_thread">
+    <noscript>Please enable JavaScript to view the <a href="//disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+  </div>
+</section>
+
+<script>
+  var disqus_shortname = 'ocowchun';
+  
+  var disqus_url = 'https://blog.ocowchun.com/2016/11/21/one-click-deploy-rails-app/';
+  
+  (function(){
+    var dsq = document.createElement('script');
+    dsq.type = 'text/javascript';
+    dsq.async = true;
+    dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+    (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+  })();
+</script>
+
+
+  
+</main>
+
+
+<script>
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-78480228-1', 'auto');
+  ga('send', 'pageview');
+
+</script>
+</body>
+</html>

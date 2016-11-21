@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Introduction To MJML | ocowchun</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <link rel="shortcut icon" href="/favicon.ico">
+  <link rel="stylesheet" href="/css/app.css">
+  <!-- <link rel='stylesheet' href='http://fonts.useso.com/css?family=Source+Code+Pro'> -->
+</head>
+
+<body>
+  <nav class="app-nav">
+  
+      
+        <a class="active" href="/.">home</a>
+        
+
+      
+  
+      
+        <a href="/archives">archive</a>
+      
+  
+      
+        <a href="/about">about</a>
+      
+  
+      
+        <a href="/atom.xml">rss</a>
+      
+  
+</nav>
+
+  <main class="post">
+  <article>
+  <h1 class="article-title">
+    <a href="/2016/06/15/introduction-to-mjml/">Introduction To MJML</a>
+  </h1>
+
+  <section class="article-meta">
+    <p class="article-date">六月 15 2016</p>
+  </section>
+
+  <section class="article-entry">
+    <p>使用 html 寫 email 時，一定都遇過以下這些問題</p>
+<ol>
+<li>用 table 排版超麻煩</li>
+<li>不能直接使用 css，所以會有一堆重複的code</li>
+<li>用手機開信的時候，版面爆炸了</li>
+</ol>
+<p>這些問題 <a href="https://mjml.io/" target="_blank" rel="external">MJML</a> 都幫我們解決了。</p>
+<p>MJML 使用 react 將 預先設計好的 MJML element 轉換成 html，你可以用類似 grid 的方式來排版，內建支援 mobile email，透過將重複使用的部分抽離成 custom element 來減少程式碼重複的問題，簡單的說你只要會寫 react ，你就可以無腦設計出長得漂亮，手機瀏覽不跑版的 email 。</p>
+<h2 id="開始你的第一封-MJML"><a href="#開始你的第一封-MJML" class="headerlink" title="開始你的第一封 MJML"></a>開始你的第一封 MJML</h2><p>你可以使用 MJML 的<a href="https://mjml.io/try-it-live" target="_blank" rel="external">線上編輯器</a> 或是<a href="https://mjml.io/download" target="_blank" rel="external">下載</a> MJML 的 package</p>
+<p>然後貼下面這段 code</p>
+<figure class="highlight html"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div></pre></td><td class="code"><pre><div class="line"><span class="tag">&lt;<span class="name">mjml</span>&gt;</span></div><div class="line">  <span class="tag">&lt;<span class="name">mj-body</span>&gt;</span></div><div class="line">    <span class="tag">&lt;<span class="name">mj-container</span>&gt;</span></div><div class="line">      <span class="tag">&lt;<span class="name">mj-section</span>&gt;</span></div><div class="line">        <span class="tag">&lt;<span class="name">mj-column</span>&gt;</span></div><div class="line"></div><div class="line">          <span class="tag">&lt;<span class="name">mj-image</span> <span class="attr">width</span>=<span class="string">"100"</span> <span class="attr">src</span>=<span class="string">"/assets/img/logo-small.png"</span>&gt;</span><span class="tag">&lt;/<span class="name">mj-image</span>&gt;</span></div><div class="line"></div><div class="line">          <span class="tag">&lt;<span class="name">mj-divider</span> <span class="attr">border-color</span>=<span class="string">"#F45E43"</span>&gt;</span><span class="tag">&lt;/<span class="name">mj-divider</span>&gt;</span></div><div class="line"></div><div class="line">          <span class="tag">&lt;<span class="name">mj-text</span> <span class="attr">font-size</span>=<span class="string">"20px"</span> <span class="attr">color</span>=<span class="string">"#F45E43"</span> <span class="attr">font-family</span>=<span class="string">"helvetica"</span>&gt;</span>Hello World<span class="tag">&lt;/<span class="name">mj-text</span>&gt;</span></div><div class="line"></div><div class="line">        <span class="tag">&lt;/<span class="name">mj-column</span>&gt;</span></div><div class="line">      <span class="tag">&lt;/<span class="name">mj-section</span>&gt;</span></div><div class="line">    <span class="tag">&lt;/<span class="name">mj-container</span>&gt;</span></div><div class="line">  <span class="tag">&lt;/<span class="name">mj-body</span>&gt;</span></div><div class="line"><span class="tag">&lt;/<span class="name">mjml</span>&gt;</span></div></pre></td></tr></table></figure>
+<p>如果你是使用自己的編輯器的話，可以將檔案命名為 <code>hello.mjml</code> ，然後執行</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">$ mjml -r index.mjml -o index.html</div></pre></td></tr></table></figure>
+<p>恭喜你，你已經完成了你的第一封信件。</p>
+<h2 id="瞭解-MJML-的排版"><a href="#瞭解-MJML-的排版" class="headerlink" title="瞭解 MJML 的排版"></a>瞭解 MJML 的排版</h2><p>信件內容會包在 <code>mj-container</code> 底下，<code>mj-container</code> 底下會分成好幾個 <code>section</code>，<br>每個 <code>section</code> 底下又會有多個 <code>column</code>，目前每個 <code>section</code> 最多可以有4個 <code>column</code></p>
+<p><img src="http://i.imgur.com/6kfw0KS.png" alt="Imgur"></p>
+<h3 id="column-size"><a href="#column-size" class="headerlink" title="column size"></a><a href="https://mjml.io/documentation/#column-sizing" target="_blank" rel="external">column size</a></h3><p>每個 section 裡面都會包含 column(最多4個), section 的最大寬度為 600px ，會根據你的 column 數目去做調整。</p>
+<figure class="highlight html"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div></pre></td><td class="code"><pre><div class="line"><span class="tag">&lt;<span class="name">mjml</span>&gt;</span> </div><div class="line">  <span class="tag">&lt;<span class="name">mj-body</span>&gt;</span></div><div class="line">   <span class="tag">&lt;<span class="name">mj-container</span>&gt;</span> </div><div class="line">     <span class="tag">&lt;<span class="name">mj-section</span>&gt;</span></div><div class="line">      <span class="tag">&lt;<span class="name">mj-column</span> &gt;</span> <span class="comment">&lt;!-- First column content --&gt;</span> <span class="tag">&lt;/<span class="name">mj-column</span>&gt;</span> </div><div class="line">      <span class="tag">&lt;<span class="name">mj-column</span>&gt;</span> <span class="comment">&lt;!-- Second column content --&gt;</span> <span class="tag">&lt;/<span class="name">mj-column</span>&gt;</span> </div><div class="line">    <span class="tag">&lt;/<span class="name">mj-section</span>&gt;</span></div><div class="line">  <span class="tag">&lt;/<span class="name">mj-container</span>&gt;</span></div><div class="line"><span class="tag">&lt;/<span class="name">mj-body</span>&gt;</span> </div><div class="line"><span class="tag">&lt;/<span class="name">mjml</span>&gt;</span></div></pre></td></tr></table></figure>
+<p>以上面這段 mjml 為例，600px/2 column,每個 <code>mj-column</code> 會有 300px </p>
+<h4 id="手動調整寬度"><a href="#手動調整寬度" class="headerlink" title="手動調整寬度"></a>手動調整寬度</h4><figure class="highlight html"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div></pre></td><td class="code"><pre><div class="line"><span class="tag">&lt;<span class="name">mjml</span>&gt;</span> </div><div class="line">  <span class="tag">&lt;<span class="name">mj-body</span>&gt;</span></div><div class="line">   <span class="tag">&lt;<span class="name">mj-container</span>&gt;</span> </div><div class="line">     <span class="tag">&lt;<span class="name">mj-section</span>&gt;</span></div><div class="line">      <span class="tag">&lt;<span class="name">mj-column</span> <span class="attr">width</span>=<span class="string">"300px"</span>&gt;</span> <span class="comment">&lt;!-- First column content --&gt;</span> <span class="tag">&lt;/<span class="name">mj-column</span>&gt;</span> </div><div class="line">      <span class="tag">&lt;<span class="name">mj-column</span>&gt;</span> <span class="comment">&lt;!-- Second column content --&gt;</span> <span class="tag">&lt;/<span class="name">mj-column</span>&gt;</span> </div><div class="line">    <span class="tag">&lt;/<span class="name">mj-section</span>&gt;</span></div><div class="line">  <span class="tag">&lt;/<span class="name">mj-container</span>&gt;</span></div><div class="line"><span class="tag">&lt;/<span class="name">mj-body</span>&gt;</span> </div><div class="line"><span class="tag">&lt;/<span class="name">mjml</span>&gt;</span></div></pre></td></tr></table></figure>
+<p>如果你手動指定了 section 中某個 column 的寬度 ，<strong>該 section 全部的 column 都必須手動設定寬度。</strong></p>
+<h3 id="Nesting"><a href="#Nesting" class="headerlink" title="Nesting"></a><a href="https://mjml.io/documentation/#nesting" target="_blank" rel="external">Nesting</a></h3><p>目前 column 裡面 不可以有 section,column component。</p>
+<h3 id="Styling"><a href="#Styling" class="headerlink" title="Styling"></a><a href="https://mjml.io/documentation/#tag-styling" target="_blank" rel="external">Styling</a></h3><p>目前無法用寫 css 的方式來表達樣式， style 也有所限制，我個人的做法是將常用的部分變成 custom component。</p>
+<h2 id="使用-stater-kit-加速開發"><a href="#使用-stater-kit-加速開發" class="headerlink" title="使用 stater-kit 加速開發"></a>使用 stater-kit 加速開發</h2><p>不過在實際開發的時候，我個人還是習慣用 sublime text 來開發，可以先使用<a href="https://github.com/epayet/mjml-starter-kit" target="_blank" rel="external">epayet/mjml-starter-kit</a>來練習。</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div></pre></td><td class="code"><pre><div class="line">$ git <span class="built_in">clone</span> https://github.com/epayet/mjml-starter-kit.git</div><div class="line">$ <span class="built_in">cd</span> mjml-starter-kit</div><div class="line">$ npm install</div><div class="line">$ npm start</div></pre></td></tr></table></figure>
+<p><a href="https://mjml.io/documentation/#standard-components" target="_blank" rel="external">更多 MJML 內建的 component</a><br><a href="https://mjml.io/templates" target="_blank" rel="external">Templates</a></p>
+<h2 id="結論"><a href="#結論" class="headerlink" title="結論"></a>結論</h2><p>MJML 使用 grid 的方式來排版，同時還支援手機頁面的樣式，可以加速 email 的開發過程，本文簡單的示範了如何使用 MJML 來寫一個簡單的信件，下次將會分享如何使用 custom component 來建立更複雜的頁面。</p>
+
+  </section>
+</article>
+
+  <div class="sharing grid">
+  <section class="profile grid-item grid">
+    <img class="avatar" src="https://www.gravatar.com/avatar/a7da45a4a1667717721e9a81d66845ff" alt="avatar" />
+    <div class="grid-item">
+      <p class="title"> ocowchun </p>
+      <p class="subtitle"> yoyoyo </p>
+    <div>
+  </section>
+
+  <section class="share-btns">
+    <!-- <p> share it if you like it~ </p> -->
+    <a
+  class="twitter-share-button"
+  data-size="large"
+  data-via="ocowchun"
+  href="https://twitter.com/intent/tweet?text=使用 html 寫 email 時，一定"
+>
+  Tweet
+</a>
+
+<script>
+  window.twttr = (function(d, s, id) {
+  var js, fjs = d.getElementsByTagName(s)[0],
+    t = window.twttr || {};
+  if (d.getElementById(id)) return t;
+  js = d.createElement(s);
+  js.id = id;
+  js.src = "https://platform.twitter.com/widgets.js";
+  js.async = true;
+  fjs.parentNode.insertBefore(js, fjs);
+
+  t._e = [];
+  t.ready = function(f) {
+    t._e.push(f);
+  };
+
+  return t;
+}(document, "script", "twitter-wjs"));
+</script>
+
+  </section>
+</div>
+
+
+  
+    
+<section class="article-comment">
+  <div id="disqus_thread">
+    <noscript>Please enable JavaScript to view the <a href="//disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+  </div>
+</section>
+
+<script>
+  var disqus_shortname = 'ocowchun';
+  
+  var disqus_url = 'https://blog.ocowchun.com/2016/06/15/introduction-to-mjml/';
+  
+  (function(){
+    var dsq = document.createElement('script');
+    dsq.type = 'text/javascript';
+    dsq.async = true;
+    dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+    (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+  })();
+</script>
+
+
+  
+</main>
+
+
+<script>
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-78480228-1', 'auto');
+  ga('send', 'pageview');
+
+</script>
+</body>
+</html>

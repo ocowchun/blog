@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>使用 Apex 協助開發 AWS Lambda | ocowchun</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <link rel="shortcut icon" href="/favicon.ico">
+  <link rel="stylesheet" href="/css/app.css">
+  <!-- <link rel='stylesheet' href='http://fonts.useso.com/css?family=Source+Code+Pro'> -->
+</head>
+
+<body>
+  <nav class="app-nav">
+  
+      
+        <a class="active" href="/.">home</a>
+        
+
+      
+  
+      
+        <a href="/archives">archive</a>
+      
+  
+      
+        <a href="/about">about</a>
+      
+  
+      
+        <a href="/atom.xml">rss</a>
+      
+  
+</nav>
+
+  <main class="post">
+  <article>
+  <h1 class="article-title">
+    <a href="/2016/05/28/lambda-development/">使用 Apex 協助開發 AWS Lambda</a>
+  </h1>
+
+  <section class="article-meta">
+    <p class="article-date">五月 28 2016</p>
+  </section>
+
+  <section class="article-entry">
+    <p>本文將簡單分享如何快速的開發 <a href="https://aws.amazon.com/tw/documentation/lambda/" target="_blank" rel="external">AWS Lambda</a><br>使用的語言為 JavaScript</p>
+<p>使用 AWS Lambda 的好處在於你完全不用管 server 你就是寫code就對了。</p>
+<p>不過他也有一些限制，例如目前只支援特定程式語言，每個 Lambda 的執行時間有限制(目前每次執行最長時間是 300秒)，可能不適合使用在需要建立 connection 的情境(i.e. mysql)</p>
+<p>我個人目前使用 AWS Lambda 的用途包含:</p>
+<ol>
+<li>定期從DB整理資料，丟到 logstash</li>
+<li>定期監測特定數據，符合條件時，發出 Slack 通知</li>
+<li>定期整理資料，將資料打包成 csv 丟到 S3</li>
+</ol>
+<p>將固定週期要執行的小程式，透過 CloudWatch Events 的設定，自動去執行 Lambda。</p>
+<hr>
+<h2 id="Apex-Introduction"><a href="#Apex-Introduction" class="headerlink" title="Apex Introduction"></a>Apex Introduction</h2><p><a href="https://github.com/apex/apex" target="_blank" rel="external">Apex</a> 的主要目的是協助我們管理 AWS Lambda 開發，包括打包 function 成 zip，上傳到S3、部署、查看特定 function 的log,使用 terraform 管理 Lambda 相關的 infrastructure。<br>Apex 主要是使用 Golang 開發，開發者包含知名的 TJ 大大。</p>
+<hr>
+<h2 id="開始你的第一個-lambda-function"><a href="#開始你的第一個-lambda-function" class="headerlink" title="開始你的第一個 lambda function"></a>開始你的第一個 lambda function</h2><p>這邊是程式碼的<a href="https://github.com/ocowchun/lambda101" target="_blank" rel="external">範例</a></p>
+<h3 id="安裝-apex"><a href="#安裝-apex" class="headerlink" title="安裝 apex"></a><a href="https://github.com/apex/apex#installation" target="_blank" rel="external">安裝 apex</a></h3><p>如果你的電腦室 OS X, Linux, 或是 OpenBSD:<br>你只要在 terminal 執行下面這一行就可以安裝了</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">curl https://raw.githubusercontent.com/apex/apex/master/install.sh | sh</div></pre></td></tr></table></figure>
+<p>如果你是 Windows 的用戶你可以透過<a href="https://github.com/apex/apex/releases" target="_blank" rel="external">下載binary</a>來安裝。</p>
+<p>如果你之前已經有安裝過的話，可以在 terminal 執行下面這個指令來更新</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">apex upgrade</div></pre></td></tr></table></figure>
+<p>本文章使用的 Apex 版本是 <code>0.9.0</code></p>
+<h3 id="1-建立專案資料夾"><a href="#1-建立專案資料夾" class="headerlink" title="1. 建立專案資料夾"></a>1. 建立專案資料夾</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div></pre></td><td class="code"><pre><div class="line">mkdir myproject &amp;&amp; <span class="built_in">cd</span> myproject</div><div class="line">apex init</div><div class="line"><span class="comment"># 他會詢問你專案名稱,專案敘述,這邊請各位朋友自行發揮</span></div><div class="line"><span class="comment"># 然後詢問你是否要使用 Terraform 來管理 infrastructure</span></div><div class="line"><span class="comment"># 我建議選擇 yes, 我們之後的範例會搭配 Terraform</span></div><div class="line"><span class="comment"># 然後他會要你選擇你需要的環境,這邊可以按照習慣的開發方式來選擇,記得至少要填寫 dev</span></div><div class="line"><span class="comment"># 接著會問你是否要將 Terraform 的狀態儲存到 S3 上，如果你有選擇搭配 Terraform的話 這邊建議選擇 yes</span></div></pre></td></tr></table></figure>
+<h3 id="1-1-安裝-Terraform-選配"><a href="#1-1-安裝-Terraform-選配" class="headerlink" title="1.1 安裝 Terraform (選配)"></a>1.1 安裝 Terraform (選配)</h3><p>Terraform是一個用來管理 AWS infrastructure 的工具(也可以管理其他雲端服務)，你可以把他想像成另外一個 AWS CloudFormation 。</p>
+<p>下面是安裝 Terraform 的網址<br><a href="https://www.terraform.io/downloads.html" target="_blank" rel="external">https://www.terraform.io/downloads.html</a></p>
+<h3 id="2-設定-AWS-credentials"><a href="#2-設定-AWS-credentials" class="headerlink" title="2. 設定 AWS credentials"></a>2. 設定 AWS credentials</h3><p>你的 User 會需要 <code>AWSLambdaFullAccess</code> 的權限</p>
+<h4 id="設定環境變數"><a href="#設定環境變數" class="headerlink" title="設定環境變數"></a>設定環境變數</h4><figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div></pre></td><td class="code"><pre><div class="line">$ <span class="built_in">export</span> AWS_ACCESS_KEY=AWS_account_access_key</div><div class="line">$ <span class="built_in">export</span> AWS_SECRET_KEY=AWS_account_secret_key</div><div class="line">$ <span class="built_in">export</span> AWS_REGION=AWS_region</div></pre></td></tr></table></figure>
+<p>或是用<a href="http://apex.run/#aws-credentials" target="_blank" rel="external">其他方法</a>來設定 AWS credentials</p>
+<h3 id="3-設定-AWS-role"><a href="#3-設定-AWS-role" class="headerlink" title="3. 設定 AWS role"></a>3. 設定 AWS role</h3><h4 id="方法一-手動建立-role"><a href="#方法一-手動建立-role" class="headerlink" title="方法一:手動建立 role"></a>方法一:手動建立 role</h4><h4 id="方法二-使用-Terraform"><a href="#方法二-使用-Terraform" class="headerlink" title="方法二: 使用 Terraform"></a>方法二: 使用 Terraform</h4><p>確認你有安裝 Terraform ，並且有設定好 AWS credentials ，同時 AWS credential有相對應的權限<br>為了方便測試可以先選擇 <code>AdministratorAccess</code>，不過實際開發的時候記得要設定好權限。</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">apex infra apply</div></pre></td></tr></table></figure>
+<h3 id="4-部署"><a href="#4-部署" class="headerlink" title="4. 部署"></a>4. 部署</h3><p>好了千辛萬苦之後終於要開始部署我們的 lambda function 了</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">apex deploy</div></pre></td></tr></table></figure>
+<h3 id="5-執行-lambda-function"><a href="#5-執行-lambda-function" class="headerlink" title="5. 執行 lambda function"></a>5. 執行 lambda function</h3><p>成功部署了 lambda function ，當然要趕快來測試一下才行，在 terminal 執行</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">apex invoke hello</div></pre></td></tr></table></figure>
+<p>你應該會看到 </p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">&#123;&quot;hello&quot;:&quot;world&quot;&#125;</div></pre></td></tr></table></figure>
+<p>如果你順利做到這邊，恭喜，你已經完成你的第一個 lambda function ，可以在你的履歷加上 serverless 這個技能。</p>
+<hr>
+<h2 id="專案架構"><a href="#專案架構" class="headerlink" title="專案架構"></a>專案架構</h2><p>這邊我們簡單講述一下 Apex 的專案架構，假設我有一個簡單的 Apex 專案長得像下面這樣:</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div></pre></td><td class="code"><pre><div class="line">project.json</div><div class="line">functions</div><div class="line">├── bar</div><div class="line">│   ├── function.json</div><div class="line">│   └── index.js</div><div class="line">└── foo</div><div class="line">    ├── function.json</div><div class="line">    └── index.js</div></pre></td></tr></table></figure>
+<h3 id="project-json"><a href="#project-json" class="headerlink" title="project.json"></a><a href="https://github.com/apex/apex/blob/master/docs/projects.md" target="_blank" rel="external">project.json</a></h3><p>每個 Apex 專案的根目錄都需要有一個 <code>project.json</code> ，這裡面會有專案的基本資料與設定，同時也會是每個 function 預設的設定。</p>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div></pre></td><td class="code"><pre><div class="line">&#123;</div><div class="line">  <span class="string">"name"</span>: <span class="string">"node"</span>,</div><div class="line">  <span class="string">"description"</span>: <span class="string">"Node.js example project"</span>,</div><div class="line">  <span class="string">"role"</span>: <span class="string">"arn:aws:iam::293503197324:role/lambda"</span>,</div><div class="line">  <span class="string">"memory"</span>: <span class="number">512</span></div><div class="line">&#125;</div></pre></td></tr></table></figure>
+<p>這裏我們可以設定專案的名字，這會影響到你在 AWS Lambda 裡面對應的 function name，如果你沒有使用  Terraform 的話，你會需要在這裏設定 role ，role 是實際執行 Lambda 時會對應到的角色，所以你可能會需要給他相關的權限，例如你的 Lambda 會需要讀取 DynamoDB，那你就會需要幫 role 設定相關的權限。詳細的設定可以看<a href="https://github.com/apex/apex/blob/master/docs/projects.md" target="_blank" rel="external">這裡</a></p>
+<h3 id="function"><a href="#function" class="headerlink" title="function"></a>function</h3><p>在 Apex 的架構下，<code>functions</code> 下的資料夾都會對應到一個 AWS Lambda，所以上述的情況，我會有 bar,foo 兩個 AWS Lambda 。</p>
+<h3 id="function-json"><a href="#function-json" class="headerlink" title="function.json"></a><a href="https://github.com/apex/apex/blob/master/docs/functions.md" target="_blank" rel="external">function.json</a></h3><p>除了 <code>project.json</code> 外，你可以在每個 function 資料夾底下建立 <code>function.json</code> ，來設定這個 function 詳細的設定可以看<a href="https://github.com/apex/apex/blob/master/docs/functions.md" target="_blank" rel="external">這裡</a></p>
+<h2 id="常用的-Apex-指令"><a href="#常用的-Apex-指令" class="headerlink" title="常用的 Apex 指令"></a>常用的 Apex 指令</h2><h3 id="apex-deploy"><a href="#apex-deploy" class="headerlink" title="apex deploy"></a>apex deploy</h3><p>將 <code>functions</code> 下的每一個 <code>function</code> 部署到 AWS Lambda</p>
+<h3 id="apex-list"><a href="#apex-list" class="headerlink" title="apex list"></a>apex list</h3><p>列出目前 AWS Lambda 上的 functions</p>
+<h3 id="apex-invoke"><a href="#apex-invoke" class="headerlink" title="apex invoke "></a>apex invoke <function-name></function-name></h3><p>執行指定的 function</p>
+<h3 id="apex-delete"><a href="#apex-delete" class="headerlink" title="apex delete "></a>apex delete <function-name></function-name></h3><p>刪除指定的 AWS Lambda function</p>
+<h3 id="apex-infra"><a href="#apex-infra" class="headerlink" title="apex infra"></a>apex infra</h3><p>使用 Terraform ，之後會分享使用方式。</p>
+<h3 id="apex-logs"><a href="#apex-logs" class="headerlink" title="apex logs"></a>apex logs</h3><p>顯示 AWS Lambda 執行的 log， 可以在後面指定 function name 例如 <code>apex logs hello</code> debug 很好用。</p>
+<h3 id="apex-metrics"><a href="#apex-metrics" class="headerlink" title="apex metrics"></a>apex metrics</h3><p>顯示 AWS Lambda 的相關數據，包含執行次數，錯誤…</p>
+<hr>
+<h2 id="使用-webpack-來打包-JavaScript"><a href="#使用-webpack-來打包-JavaScript" class="headerlink" title="使用 webpack 來打包 JavaScript"></a>使用 <a href="https://github.com/webpack/webpack" target="_blank" rel="external">webpack</a> 來打包 JavaScript</h2><p>接下來會討論如何在 Apex 裡面使用 webpack，畢竟 nodejs 的哲學就是要把全部的東西都拆成 package 麻<br>，所以我們會講解怎麼將你的 lambda function 使用到 package 打包起來。</p>
+<p>我們這裡使用除了打包 JavaScript 之外，也順便使用了 babel 來編譯你的 JavaScript ，這個年頭就是要寫 es6 才能顯得你是一個有跟上時代的工程師。</p>
+<p>這裏的範例是使用 <a href="https://github.com/request/request" target="_blank" rel="external">request</a> 對 <code>https://status.github.com/api/status.json</code> 發出請求，取得目前 GitHub的狀況。</p>
+<h3 id="1-首先在-project-json-加入"><a href="#1-首先在-project-json-加入" class="headerlink" title="1 首先在 project.json 加入"></a>1 首先在 <code>project.json</code> 加入</h3><figure class="highlight js"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div></pre></td><td class="code"><pre><div class="line"></div><div class="line"><span class="string">"handler"</span>: <span class="string">"lib.handle"</span>,</div><div class="line"><span class="string">"hooks"</span>: &#123;</div><div class="line">  <span class="string">"build"</span>: <span class="string">"../../node_modules/.bin/webpack --config ../../webpack.config.js"</span>,</div><div class="line">  <span class="string">"clean"</span>: <span class="string">"rm -fr lib"</span></div><div class="line">&#125;</div></pre></td></tr></table></figure>
+<h3 id="2-然後設定webpack-config-js"><a href="#2-然後設定webpack-config-js" class="headerlink" title="2. 然後設定webpack.config.js"></a>2. 然後設定<code>webpack.config.js</code></h3><figure class="highlight js"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div><div class="line">19</div><div class="line">20</div></pre></td><td class="code"><pre><div class="line"><span class="built_in">module</span>.exports = &#123;</div><div class="line">  <span class="attr">entry</span>: <span class="string">'./index.js'</span>,</div><div class="line">  <span class="attr">target</span>: <span class="string">'node'</span>,</div><div class="line">  <span class="attr">output</span>: &#123;</div><div class="line">    <span class="attr">path</span>: <span class="string">'./lib'</span>,</div><div class="line">    <span class="attr">filename</span>: <span class="string">'index.js'</span>,</div><div class="line">    <span class="attr">libraryTarget</span>: <span class="string">'commonjs2'</span></div><div class="line">  &#125;,</div><div class="line">  <span class="attr">module</span>: &#123;</div><div class="line">    <span class="attr">noParse</span>: [<span class="regexp">/validate\.js/</span>],</div><div class="line">    <span class="attr">loaders</span>: [&#123;</div><div class="line">      <span class="attr">test</span>: <span class="regexp">/\.js$/</span>,</div><div class="line">      <span class="attr">loader</span>: <span class="string">'babel'</span>,</div><div class="line">      <span class="attr">exclude</span>: [<span class="regexp">/node_modules/</span>]</div><div class="line">    &#125;, &#123;</div><div class="line">      <span class="attr">test</span>: <span class="regexp">/\.json$/</span>,</div><div class="line">      <span class="attr">loader</span>: <span class="string">'json-loader'</span></div><div class="line">    &#125;]</div><div class="line">  &#125;</div><div class="line">&#125;</div></pre></td></tr></table></figure>
+<h3 id="3-設定-package-json-並執行-npm-install"><a href="#3-設定-package-json-並執行-npm-install" class="headerlink" title="3. 設定 package.json 並執行 npm install"></a>3. 設定 <code>package.json</code> 並執行 <code>npm install</code></h3><figure class="highlight javascript"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div><div class="line">19</div><div class="line">20</div><div class="line">21</div><div class="line">22</div><div class="line">23</div><div class="line">24</div></pre></td><td class="code"><pre><div class="line">&#123;</div><div class="line">  <span class="string">"name"</span>: <span class="string">"your-project-name"</span>,</div><div class="line">  <span class="string">"version"</span>: <span class="string">"1.0.0"</span>,</div><div class="line">  <span class="string">"description"</span>: <span class="string">"your-project-description"</span>,</div><div class="line">  <span class="string">"scripts"</span>: &#123;</div><div class="line">    <span class="string">"test"</span>: <span class="string">"echo \"Error: no test specified\" &amp;&amp; exit 1"</span></div><div class="line">  &#125;,</div><div class="line">  <span class="string">"dependencies"</span>: &#123;</div><div class="line">    <span class="string">"bluebird"</span>: <span class="string">"^3.4.0"</span>,</div><div class="line">    <span class="string">"request"</span>: <span class="string">"^2.72.0"</span></div><div class="line">  &#125;,</div><div class="line">  <span class="string">"devDependencies"</span>: &#123;</div><div class="line">    <span class="string">"babel-loader"</span>: <span class="string">"^6.2.3"</span>,</div><div class="line">    <span class="string">"babel-plugin-syntax-async-functions"</span>: <span class="string">"^6.3.13"</span>,</div><div class="line">    <span class="string">"babel-plugin-transform-async-to-generator"</span>: <span class="string">"^6.4.6"</span>,</div><div class="line">    <span class="string">"babel-plugin-transform-regenerator"</span>: <span class="string">"^6.4.4"</span>,</div><div class="line">    <span class="string">"babel-plugin-transform-runtime"</span>: <span class="string">"^6.4.3"</span>,</div><div class="line">    <span class="string">"babel-preset-es2015"</span>: <span class="string">"^6.3.13"</span>,</div><div class="line">    <span class="string">"babel-preset-stage-0"</span>: <span class="string">"^6.3.13"</span>,</div><div class="line">    <span class="string">"json-loader"</span>: <span class="string">"^0.5.4"</span>,</div><div class="line">    <span class="string">"transform-loader"</span>: <span class="string">"^0.2.3"</span>,</div><div class="line">    <span class="string">"webpack"</span>: <span class="string">"^1.12.13"</span></div><div class="line">  &#125;</div><div class="line">&#125;</div></pre></td></tr></table></figure>
+<h3 id="4-新增-lib-github-js"><a href="#4-新增-lib-github-js" class="headerlink" title="4. 新增 lib/github.js"></a>4. 新增 <code>lib/github.js</code></h3><p>這邊就只是使用 <code>reqest</code> 取得 <code>https://status.github.com/api/status.json</code> 的內容。</p>
+<figure class="highlight js"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">let</span> request = <span class="built_in">require</span>(<span class="string">'request'</span>);</div><div class="line"><span class="keyword">let</span> <span class="built_in">Promise</span> = <span class="built_in">require</span>(<span class="string">'bluebird'</span>);</div><div class="line"></div><div class="line"><span class="keyword">export</span> <span class="function"><span class="keyword">function</span> <span class="title">getStatus</span>(<span class="params"></span>) </span>&#123;</div><div class="line">    <span class="keyword">return</span> <span class="keyword">new</span> <span class="built_in">Promise</span>(<span class="function"><span class="keyword">function</span>(<span class="params">resolve, reject</span>) </span>&#123;</div><div class="line">        request(<span class="string">'https://status.github.com/api/status.json'</span>, (error, response, body) =&gt; &#123;</div><div class="line">            <span class="keyword">if</span> (error) &#123;</div><div class="line">                reject(error);</div><div class="line">            &#125; <span class="keyword">else</span> &#123;</div><div class="line">                resolve(response.body)</div><div class="line">            &#125;</div><div class="line">        &#125;);</div><div class="line">    &#125;);</div><div class="line">&#125;</div></pre></td></tr></table></figure>
+<h3 id="5-新增-function-github-status-index-js"><a href="#5-新增-function-github-status-index-js" class="headerlink" title="5. 新增 function/github_status/index.js"></a>5. 新增 <code>function/github_status/index.js</code></h3><p>呼叫 <code>getStatus</code> 成功時回傳結果，失敗時回傳錯誤內容，執行 Lambda 時， <code>cb</code> 的第一個參數如果不是 <code>null</code> 就會視為執行失敗，反之則為執行成功，更多細節請看<a href="http://docs.aws.amazon.com/lambda/latest/dg/nodejs-prog-model-handler.html#nodejs-prog-model-handler-callback" target="_blank" rel="external">Using the Callback Parameter</a></p>
+<figure class="highlight js"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">import</span> &#123;getStatus&#125; <span class="keyword">from</span> <span class="string">'../../lib/github'</span>;</div><div class="line"></div><div class="line">exports.handle = <span class="function"><span class="keyword">function</span>(<span class="params">e, ctx, cb</span>) </span>&#123;</div><div class="line">    getStatus().then(<span class="function">(<span class="params">result</span>) =&gt;</span> cb(<span class="literal">null</span>, result)).catch(<span class="function">(<span class="params">err</span>) =&gt;</span> cb(err))</div><div class="line">&#125;</div></pre></td></tr></table></figure>
+<h3 id="6-新增-babelrc"><a href="#6-新增-babelrc" class="headerlink" title="6. 新增 .babelrc"></a>6. 新增 <code>.babelrc</code></h3><p>babel 的相關設定</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div></pre></td><td class="code"><pre><div class="line">&#123;</div><div class="line">  &quot;presets&quot;: [&quot;es2015&quot;, &quot;stage-0&quot;],</div><div class="line">  &quot;plugins&quot;: [&quot;transform-runtime&quot;, &quot;transform-regenerator&quot;, &quot;syntax-async-functions&quot;, &quot;transform-async-to-generator&quot;]</div><div class="line">&#125;</div></pre></td></tr></table></figure>
+<h3 id="7-部署"><a href="#7-部署" class="headerlink" title="7. 部署"></a>7. 部署</h3><p>我們現在已經完成一個新的 function 叫做 <code>github_status</code> ，然後我們一樣在 terminal 執行 <code>apex deploy</code> 來部署我們的新 function，最後執行 <code>apex invoke github_status</code> 就可以看到這個 function 的執行結果。</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div></pre></td><td class="code"><pre><div class="line">apex invoke github_status</div><div class="line"><span class="comment">#"&#123;\"status\":\"good\",\"last_updated\":\"2016-05-28T13:57:18Z\"&#125;"</span></div></pre></td></tr></table></figure>
+<h2 id="結論"><a href="#結論" class="headerlink" title="結論"></a>結論</h2><p>在這邊我們簡單敘述了如何建立使用 apex 來開發 AWS Lambda ，撇除一開始的麻煩設定，接下來當你需要建立新的 function 的時候，你只需要在 <code>functions</code> 下建立對應的 <code>function_name</code> 資料夾，完成你的程式碼，然後執行 <code>apex deploy</code> 就可以了。</p>
+<p>我覺得 Apex 搭配 AWS Lambda 是一個可以讓你真正專注在開發程式，而不需要花費心力去管理系統營運的開發方式，當然他也有許許多多麻煩的地方，我會在之後跟大家分享。</p>
+<h2 id="References"><a href="#References" class="headerlink" title="References"></a>References</h2><ul>
+<li><a href="http://docs.aws.amazon.com/lambda/latest/dg/welcome.html" target="_blank" rel="external">AWS Lambda  Developer Guide</a></li>
+<li><a href="https://github.com/apex/apex" target="_blank" rel="external">Apex</a></li>
+<li><a href="https://www.terraform.io/docs/providers/aws/index.html" target="_blank" rel="external">Terraform</a></li>
+<li><a href="http://abalone0204.github.io/2016/05/22/serverless-simple-crud/" target="_blank" rel="external">淺析 serverless 架構與實作</a></li>
+<li><a href="https://vinta.ws/code/aws-lambda-notes.html" target="_blank" rel="external">AWS Lambda notes</a></li>
+</ul>
+
+  </section>
+</article>
+
+  <div class="sharing grid">
+  <section class="profile grid-item grid">
+    <img class="avatar" src="https://www.gravatar.com/avatar/a7da45a4a1667717721e9a81d66845ff" alt="avatar" />
+    <div class="grid-item">
+      <p class="title"> ocowchun </p>
+      <p class="subtitle"> yoyoyo </p>
+    <div>
+  </section>
+
+  <section class="share-btns">
+    <!-- <p> share it if you like it~ </p> -->
+    <a
+  class="twitter-share-button"
+  data-size="large"
+  data-via="ocowchun"
+  href="https://twitter.com/intent/tweet?text=本文將簡單分享如何快速的開發 <a hr"
+>
+  Tweet
+</a>
+
+<script>
+  window.twttr = (function(d, s, id) {
+  var js, fjs = d.getElementsByTagName(s)[0],
+    t = window.twttr || {};
+  if (d.getElementById(id)) return t;
+  js = d.createElement(s);
+  js.id = id;
+  js.src = "https://platform.twitter.com/widgets.js";
+  js.async = true;
+  fjs.parentNode.insertBefore(js, fjs);
+
+  t._e = [];
+  t.ready = function(f) {
+    t._e.push(f);
+  };
+
+  return t;
+}(document, "script", "twitter-wjs"));
+</script>
+
+  </section>
+</div>
+
+
+  
+    
+<section class="article-comment">
+  <div id="disqus_thread">
+    <noscript>Please enable JavaScript to view the <a href="//disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+  </div>
+</section>
+
+<script>
+  var disqus_shortname = 'ocowchun';
+  
+  var disqus_url = 'https://blog.ocowchun.com/2016/05/28/lambda-development/';
+  
+  (function(){
+    var dsq = document.createElement('script');
+    dsq.type = 'text/javascript';
+    dsq.async = true;
+    dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+    (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+  })();
+</script>
+
+
+  
+</main>
+
+
+<script>
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-78480228-1', 'auto');
+  ga('send', 'pageview');
+
+</script>
+</body>
+</html>

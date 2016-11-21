@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>筆記: Migrate your Existing Express Applications to AWS Lambda | ocowchun</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <link rel="shortcut icon" href="/favicon.ico">
+  <link rel="stylesheet" href="/css/app.css">
+  <!-- <link rel='stylesheet' href='http://fonts.useso.com/css?family=Source+Code+Pro'> -->
+</head>
+
+<body>
+  <nav class="app-nav">
+  
+      
+        <a class="active" href="/.">home</a>
+        
+
+      
+  
+      
+        <a href="/archives">archive</a>
+      
+  
+      
+        <a href="/about">about</a>
+      
+  
+      
+        <a href="/atom.xml">rss</a>
+      
+  
+</nav>
+
+  <main class="post">
+  <article>
+  <h1 class="article-title">
+    <a href="/2016/11/03/note-migrate-your-existing-express-applications-to-aws-lambda/">筆記: Migrate your Existing Express Applications to AWS Lambda</a>
+  </h1>
+
+  <section class="article-meta">
+    <p class="article-date">十一月 03 2016</p>
+  </section>
+
+  <section class="article-entry">
+    <iframe width="560" height="315" src="https://www.youtube.com/embed/Cuh_gtFX5gI" frameborder="0" allowfullscreen></iframe>
+
+<p>本文是關於 <a href="https://www.youtube.com/watch?v=Cuh_gtFX5gI" target="_blank" rel="external">Migrate your Existing Express Applications to AWS Lambda</a> 的筆記，影片內容在說明怎麼把 <a href="https://expressjs.com/" target="_blank" rel="external">Express</a> 專案整個搬移到 AWS Lambda 上。</p>
+<h2 id="API-Gateway-的新功能"><a href="#API-Gateway-的新功能" class="headerlink" title="API Gateway 的新功能"></a>API Gateway 的新功能</h2><ul>
+<li>Catch-all resource paths</li>
+<li>ANY http method</li>
+<li>PROXY integrations</li>
+</ul>
+<h3 id="Catch-all-resource-paths"><a href="#Catch-all-resource-paths" class="headerlink" title="Catch-all resource paths"></a>Catch-all resource paths</h3><p>以往需要定義非常清楚的路徑，來說明要用哪個 fucntion 處理。不過這樣的缺點在於，<code>非常耗時</code>， catch all 可以讓我們可以用比較粗略的方式來設定 API Gateway 的路徑，所以可以快速完成建置，不過相對我們的文件與自動生成的 sdk 也會來得比較不嚴謹。<br>Swagger 支援這個新功能</p>
+<h3 id="ANY-http-method"><a href="#ANY-http-method" class="headerlink" title="ANY http method"></a>ANY http method</h3><p>將所有的 method (GET, POST, PUT, …) 都對應到相同的 integration，好壞處跟前者差不多，兩個可以一起用，就只需要非常少數的 integration喔喔喔<br>Swagger 也支援這個新功能</p>
+<h3 id="PROXY-integrations"><a href="#PROXY-integrations" class="headerlink" title="PROXY integrations"></a>PROXY integrations</h3><p>不再需要 input/output mappings !</p>
+<h4 id="HTTP-PROXY"><a href="#HTTP-PROXY" class="headerlink" title="HTTP_PROXY"></a>HTTP_PROXY</h4><p>這個我用不到，跳過了。</p>
+<h4 id="AWS-PROXY"><a href="#AWS-PROXY" class="headerlink" title="AWS_PROXY"></a>AWS_PROXY</h4><p>當 request 進到 API Gateway後，會根據 request 自動產生 event，另外會將 Lambda 執行的結果轉換成 HTTP Response ， Lambda 輸出必須符合下面的格式</p>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div></pre></td><td class="code"><pre><div class="line">&#123;</div><div class="line">    <span class="string">"statusCode"</span>: httpStatusCode,</div><div class="line">    <span class="string">"headers"</span>: &#123; <span class="string">"headerName"</span>: <span class="string">"headerValue"</span>, ... &#125;,</div><div class="line">    <span class="string">"body"</span>: <span class="string">"..."</span></div><div class="line">&#125;</div></pre></td></tr></table></figure>
+<p>如果 Lambda 輸出的格式不正確會回傳  <code>502 Bad Gateway</code></p>
+<p>細節可以看這裡 <a href="http://docs.aws.amazon.com/apigateway/latest/developerguide/api-gateway-set-up-simple-proxy.html#api-gateway-set-up-lambda-proxy-integration-on-proxy-resource" target="_blank" rel="external">Set Up a Proxy Resource with the Lambda Proxy Integration</a><br>Swagger 也支援這個新功能</p>
+<h3 id="官方支援-Express-的-package"><a href="#官方支援-Express-的-package" class="headerlink" title="官方支援 Express 的 package"></a>官方支援 Express 的 package</h3><p><a href="https://github.com/awslabs/aws-serverless-express" target="_blank" rel="external">aws-serverless-express</a></p>
+<p>很棒的一張圖，解釋了整個 flow</p>
+<p><blockquote class="imgur-embed-pub" lang="en" data-id="a/AJ5yz"><a href="//imgur.com/AJ5yz"></a></blockquote><script async src="//s.imgur.com/min/embed.js" charset="utf-8"></script></p>
+<h2 id="如何-Migrate-現有的-Express-App-到-AWS-Lambda"><a href="#如何-Migrate-現有的-Express-App-到-AWS-Lambda" class="headerlink" title="如何 Migrate 現有的 Express App 到 AWS Lambda"></a>如何 Migrate 現有的 Express App 到 AWS Lambda</h2><ol>
+<li>安裝相關的 dependencies (包含 aws-serverless-express)</li>
+<li>建立一個 JavaScript wrapper</li>
+<li>打包你的專案成 zip </li>
+<li>建立 Lambda </li>
+<li>設定 API Gateway endpoint 來做 proxy</li>
+</ol>
+<h2 id="Demo-Express-to-Lambda"><a href="#Demo-Express-to-Lambda" class="headerlink" title="Demo: Express to Lambda"></a>Demo: Express to Lambda</h2><p>解釋 <a href="https://github.com/awslabs/aws-serverless-express" target="_blank" rel="external">aws-serverless-express</a> 的 sourece code，講解如何將 API Gateway 的內容轉成 Express 接收的格式，還有如何將 response 轉換成 API Gateway 接受的格式，然後手動操作一遍。</p>
+<h4 id="可以使用-aws-serverless-express-middleware-來取得-API-Gateway-的-contetxt"><a href="#可以使用-aws-serverless-express-middleware-來取得-API-Gateway-的-contetxt" class="headerlink" title="可以使用 aws-serverless-express/middleware 來取得 API Gateway 的 contetxt"></a>可以使用 <code>aws-serverless-express/middleware</code> 來取得 API Gateway 的 contetxt</h4><figure class="highlight javascript"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">const</span> awsServerlessExpressMiddleware = <span class="built_in">require</span>*(<span class="string">'aws-serverless-express/middleware'</span>);</div><div class="line">app.use(awsServerlessExpressMiddleware.eventContext());</div></pre></td></tr></table></figure>
+<h4 id="Enable-API-Gateway-CORS"><a href="#Enable-API-Gateway-CORS" class="headerlink" title="Enable API Gateway CORS"></a>Enable API Gateway CORS</h4><p>API Gateway 建立 resource 的時候，如果有選擇 Enable API Gateway CORS 的話，會自動產生一個 Method 為 OPTIONS 的 API Gateway Method，來處理瀏覽器的 preflight<br>更多 CORS 可以看阮一峰的<a href="http://www.ruanyifeng.com/blog/2016/04/cors.html" target="_blank" rel="external">跨域資源共享CORS 詳解</a></p>
+<h2 id="Express-on-Serverless"><a href="#Express-on-Serverless" class="headerlink" title="Express on Serverless"></a>Express on Serverless</h2><ul>
+<li>Auto Scale</li>
+<li>有多少請求付多少錢</li>
+<li>一樣可以做單元測試</li>
+<li>不需要變動原本的程式碼</li>
+</ul>
+<p><strong>這樣的方式也可以套用在其他的 Web Framework</strong>，你只需要去包裝 request 透過 proxy 轉給原本的 app ，然後將輸出的結果轉換成支援的格式。</p>
+<h2 id="Best-Practice"><a href="#Best-Practice" class="headerlink" title="Best Practice"></a>Best Practice</h2><h4 id="1-1-Mapping"><a href="#1-1-Mapping" class="headerlink" title="1:1 Mapping"></a>1:1 Mapping</h4><p>每個 API call 都是去觸發 stateless Lambda function ， 每個 express instance 一次只會處理一個請求，所以比較不需要擔心 concurrency 的問題。</p>
+<h4 id="Memory"><a href="#Memory" class="headerlink" title="Memory"></a>Memory</h4><p>如果你的應用是 CPU bound ，增加 memory 就可以增加執行速度。</p>
+<h4 id="Lazily-load-resources"><a href="#Lazily-load-resources" class="headerlink" title="Lazily load resources"></a>Lazily load resources</h4><p>Lambda handler 之外的 scope，只有在第一次呼叫的時候會執行到，接下來就被快取起來了。這個特性可以用來儲存資料，加速請求，<code>不過請小心使用!!</code>，畢竟儲存過多的資料會影響啟動時間，而且本質上來說你應該要<code>將每個請求視為 stateless</code>。</p>
+<h4 id="Offload-tasks-to-Gateway"><a href="#Offload-tasks-to-Gateway" class="headerlink" title="Offload tasks to Gateway"></a>Offload tasks to Gateway</h4><p>除了原本的方式之外，你可以使用 IAM 或是 custom authorization 來應付 Access Control。</p>
+<h2 id="QA-時間"><a href="#QA-時間" class="headerlink" title="QA 時間"></a>QA 時間</h2>
+  </section>
+</article>
+
+  <div class="sharing grid">
+  <section class="profile grid-item grid">
+    <img class="avatar" src="https://www.gravatar.com/avatar/a7da45a4a1667717721e9a81d66845ff" alt="avatar" />
+    <div class="grid-item">
+      <p class="title"> ocowchun </p>
+      <p class="subtitle"> yoyoyo </p>
+    <div>
+  </section>
+
+  <section class="share-btns">
+    <!-- <p> share it if you like it~ </p> -->
+    <a
+  class="twitter-share-button"
+  data-size="large"
+  data-via="ocowchun"
+  href="https://twitter.com/intent/tweet?text=rame width="560" hei"
+>
+  Tweet
+</a>
+
+<script>
+  window.twttr = (function(d, s, id) {
+  var js, fjs = d.getElementsByTagName(s)[0],
+    t = window.twttr || {};
+  if (d.getElementById(id)) return t;
+  js = d.createElement(s);
+  js.id = id;
+  js.src = "https://platform.twitter.com/widgets.js";
+  js.async = true;
+  fjs.parentNode.insertBefore(js, fjs);
+
+  t._e = [];
+  t.ready = function(f) {
+    t._e.push(f);
+  };
+
+  return t;
+}(document, "script", "twitter-wjs"));
+</script>
+
+  </section>
+</div>
+
+
+  
+    
+<section class="article-comment">
+  <div id="disqus_thread">
+    <noscript>Please enable JavaScript to view the <a href="//disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+  </div>
+</section>
+
+<script>
+  var disqus_shortname = 'ocowchun';
+  
+  var disqus_url = 'https://blog.ocowchun.com/2016/11/03/note-migrate-your-existing-express-applications-to-aws-lambda/';
+  
+  (function(){
+    var dsq = document.createElement('script');
+    dsq.type = 'text/javascript';
+    dsq.async = true;
+    dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+    (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+  })();
+</script>
+
+
+  
+</main>
+
+
+<script>
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-78480228-1', 'auto');
+  ga('send', 'pageview');
+
+</script>
+</body>
+</html>

@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  
+  <url>
+    <loc>https://blog.ocowchun.com/2016/11/21/one-click-deploy-rails-app/</loc>
+    
+    <lastmod>2016-11-21T15:00:38.000Z</lastmod>
+    
+  </url>
+  
+  <url>
+    <loc>https://blog.ocowchun.com/2016/11/03/note-migrate-your-existing-express-applications-to-aws-lambda/</loc>
+    
+    <lastmod>2016-11-16T14:40:11.000Z</lastmod>
+    
+  </url>
+  
+  <url>
+    <loc>https://blog.ocowchun.com/2016/05/15/hexo101/</loc>
+    
+    <lastmod>2016-11-16T14:40:11.000Z</lastmod>
+    
+  </url>
+  
+  <url>
+    <loc>https://blog.ocowchun.com/2016/08/13/how-to-track-aws-lambda-error/</loc>
+    
+    <lastmod>2016-11-16T14:40:11.000Z</lastmod>
+    
+  </url>
+  
+  <url>
+    <loc>https://blog.ocowchun.com/2016/06/15/introduction-to-mjml/</loc>
+    
+    <lastmod>2016-11-16T14:40:11.000Z</lastmod>
+    
+  </url>
+  
+  <url>
+    <loc>https://blog.ocowchun.com/2016/05/28/lambda-development/</loc>
+    
+    <lastmod>2016-11-16T14:40:11.000Z</lastmod>
+    
+  </url>
+  
+  <url>
+    <loc>https://blog.ocowchun.com/2016/05/14/use-fluent-to-handle-log/</loc>
+    
+    <lastmod>2016-11-16T14:40:11.000Z</lastmod>
+    
+  </url>
+  
+</urlset>

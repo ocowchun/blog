@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>如何追蹤 AWS Lambda 錯誤 | ocowchun</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <link rel="shortcut icon" href="/favicon.ico">
+  <link rel="stylesheet" href="/css/app.css">
+  <!-- <link rel='stylesheet' href='http://fonts.useso.com/css?family=Source+Code+Pro'> -->
+</head>
+
+<body>
+  <nav class="app-nav">
+  
+      
+        <a class="active" href="/.">home</a>
+        
+
+      
+  
+      
+        <a href="/archives">archive</a>
+      
+  
+      
+        <a href="/about">about</a>
+      
+  
+      
+        <a href="/atom.xml">rss</a>
+      
+  
+</nav>
+
+  <main class="post">
+  <article>
+  <h1 class="article-title">
+    <a href="/2016/08/13/how-to-track-aws-lambda-error/">如何追蹤 AWS Lambda 錯誤</a>
+  </h1>
+
+  <section class="article-meta">
+    <p class="article-date">八月 13 2016</p>
+  </section>
+
+  <section class="article-entry">
+    <p><a href="https://aws.amazon.com/tw/lambda/" target="_blank" rel="external">AWS Lambda</a>是個很方便的東西，可以免去管理機器的成本，又只需要按照使用的次數付費，不過 Lambda 目前在管理上還有很多麻煩的地方，比如說檢視使用數據(觸發次數、執行時間、成功/失敗數)，錯誤訊息的追蹤。</p>
+<p>Lambda 本身有提供簡單的 dashboard，可以查看觸發次數、執行時間、失敗數…等，不過一次只能查看一個 function，當你的 function 數變多時(比如說 30 個，這其實是非常容易達到的數字) ，如果你想要查看哪些 function 的使用次數最多、執行時間最久，或其他資料就必須自己手動做一些處理。比如自己設定 CloudWatch Dashboard，不然就是自己寫程式來呈現相關數據。</p>
+<p>因為習慣使用 <a href="https://rollbar.com/" target="_blank" rel="external">Rollbar</a> 來管理錯誤相關的事情，所以決定研究一下如何把 Lambda 的錯誤丟到 <a href="https://rollbar.com/" target="_blank" rel="external">Rollbar</a>。一開始的想法是當發生錯誤的時候，使用 <a href="https://aws.amazon.com/sns/" target="_blank" rel="external">SNS</a> 發出通知，然後設定一個追蹤錯誤的 Lambda 訂閱該通知，將相關資料與錯誤訊息丟到 Rollbar，一切看起來是那麼的美好，不過因為部分的 Lambda 有設定 VPC ，沒辦法使用 SNS ，找了一下之後發現可以從 CloudWatch Log 來處理。</p>
+<p> Lambda 執行結束時(不論成功或失敗) 都會將結果輸出到 CloudWatch Log 。因此可以透過訂閱 ClouWatch Log ，將偵測到包含 errorMessage 的 CloudWatch 丟到 Rollbar 來追蹤錯誤。這邊有個麻煩的地方在於，每個 Lambda 都會有一個自己的 log group，所以如果你寫了 10個 Lambda 你就有 10 個 log group 需要追蹤，就算使用 <a href="https://www.terraform.io/" target="_blank" rel="external">Terraform</a> 來設定還是很麻煩，不過至少比一個一個 CloudWatch 去看方便多了。</p>
+<h2 id="訂閱-ClouWatch-Log-追蹤錯誤的-Lambda-程式碼"><a href="#訂閱-ClouWatch-Log-追蹤錯誤的-Lambda-程式碼" class="headerlink" title="訂閱 ClouWatch Log 追蹤錯誤的 Lambda 程式碼"></a>訂閱 ClouWatch Log 追蹤錯誤的 Lambda 程式碼</h2><figure class="highlight js"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div><div class="line">19</div><div class="line">20</div><div class="line">21</div><div class="line">22</div><div class="line">23</div><div class="line">24</div><div class="line">25</div><div class="line">26</div><div class="line">27</div><div class="line">28</div><div class="line">29</div><div class="line">30</div><div class="line">31</div><div class="line">32</div><div class="line">33</div><div class="line">34</div><div class="line">35</div><div class="line">36</div><div class="line">37</div><div class="line">38</div><div class="line">39</div><div class="line">40</div><div class="line">41</div><div class="line">42</div><div class="line">43</div><div class="line">44</div><div class="line">45</div><div class="line">46</div><div class="line">47</div><div class="line">48</div><div class="line">49</div><div class="line">50</div><div class="line">51</div><div class="line">52</div><div class="line">53</div><div class="line">54</div><div class="line">55</div><div class="line">56</div><div class="line">57</div><div class="line">58</div><div class="line">59</div><div class="line">60</div><div class="line">61</div><div class="line">62</div><div class="line">63</div><div class="line">64</div><div class="line">65</div><div class="line">66</div><div class="line">67</div><div class="line">68</div><div class="line">69</div><div class="line">70</div><div class="line">71</div><div class="line">72</div><div class="line">73</div><div class="line">74</div><div class="line">75</div><div class="line">76</div><div class="line">77</div><div class="line">78</div><div class="line">79</div><div class="line">80</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">let</span> zlib = <span class="built_in">require</span>(<span class="string">'zlib'</span>);</div><div class="line"><span class="keyword">let</span> rollbar = <span class="built_in">require</span>(<span class="string">"rollbar"</span>);</div><div class="line"><span class="keyword">let</span> _ = <span class="built_in">require</span>(<span class="string">'underscore'</span>);</div><div class="line"><span class="keyword">let</span> <span class="built_in">Promise</span> = <span class="built_in">require</span>(<span class="string">'bluebird'</span>);</div><div class="line"></div><div class="line"><span class="comment">//建立錯誤訊息的物件</span></div><div class="line"><span class="function"><span class="keyword">function</span> <span class="title">buildErrorItem</span>(<span class="params">data</span>) </span>&#123;</div><div class="line">  <span class="keyword">let</span> item = &#123;&#125;;</div><div class="line">  item.title = data.logGroup.replace(<span class="string">'/aws/lambda/'</span>, <span class="string">''</span>);</div><div class="line"></div><div class="line"><span class="comment">// 判斷是否有錯誤訊息</span></div><div class="line">  <span class="keyword">let</span> logEvent = _.find(data.logEvents, <span class="function"><span class="keyword">function</span>(<span class="params">event</span>) </span>&#123;</div><div class="line">    <span class="keyword">return</span> event.message.indexOf(<span class="string">'errorMessage'</span>) &gt;= <span class="number">0</span>;</div><div class="line">  &#125;);</div><div class="line"></div><div class="line">  item.logStream = data.logStream;</div><div class="line">  item.logEvents = data.logEvents;</div><div class="line"></div><div class="line"><span class="comment">// 如果有錯誤訊息，才需要通知 Rollbar</span></div><div class="line">  <span class="keyword">if</span> (logEvent) &#123;</div><div class="line">    item.reportRollbar = <span class="literal">true</span>;</div><div class="line">  &#125; <span class="keyword">else</span> &#123;</div><div class="line">    item.reportRollbar = <span class="literal">false</span>;</div><div class="line">  &#125;</div><div class="line">  <span class="keyword">return</span> item;</div><div class="line"></div><div class="line">&#125;</div><div class="line"></div><div class="line"><span class="comment">// 呼叫 buildErrorItem 產生錯誤訊息的物件，然後判斷是否需要通知 Rollbar</span></div><div class="line"><span class="function"><span class="keyword">function</span> <span class="title">excuteReportMessage</span>(<span class="params">data</span>) </span>&#123;</div><div class="line"><span class="comment">// 初始化 Rollbar</span></div><div class="line">  <span class="keyword">const</span> ROLLBAR_POST_SERVER_ITEM_ACCESS_TOKEN = </div><div class="line">  env.ROLLBAR_POST_SERVER_ITEM_ACCESS_TOKEN;</div><div class="line">  rollbar.init(ROLLBAR_POST_SERVER_ITEM_ACCESS_TOKEN);</div><div class="line"></div><div class="line">  <span class="keyword">let</span> item = buildErrorItem(data);</div><div class="line">  <span class="keyword">let</span> title = item.title;</div><div class="line"></div><div class="line">  <span class="keyword">return</span> <span class="keyword">new</span> <span class="built_in">Promise</span>(<span class="function"><span class="keyword">function</span>(<span class="params">resolve, reject</span>) </span>&#123;</div><div class="line">    <span class="keyword">if</span> (item.reportRollbar) &#123;</div><div class="line">      rollbar.reportMessageWithPayloadData(title, &#123;</div><div class="line">        <span class="attr">level</span>: <span class="string">"error"</span>,</div><div class="line">        <span class="attr">custom</span>: item</div><div class="line">      &#125;, <span class="literal">null</span>, <span class="function"><span class="keyword">function</span>(<span class="params"></span>) </span>&#123;</div><div class="line">        resolve(<span class="string">"report rollbar success"</span>);</div><div class="line">      &#125;);</div><div class="line">    &#125; <span class="keyword">else</span> &#123;</div><div class="line">      resolve(<span class="string">"no necessary to report"</span>);</div><div class="line">    &#125;</div><div class="line">  &#125;);</div><div class="line">&#125;</div><div class="line"></div><div class="line"><span class="comment">// CloudWatch Log 輸入的方式是 buffer ，需要先轉成 json 物件</span></div><div class="line"><span class="comment">// 然後呼叫 excuteReportMessage 回報 Rollbar</span></div><div class="line"><span class="function"><span class="keyword">function</span> <span class="title">reportCWLError</span>(<span class="params">input, ctx</span>) </span>&#123;</div><div class="line">  <span class="keyword">let</span> payload = <span class="keyword">new</span> Buffer(input.awslogs.data, <span class="string">'base64'</span>);</div><div class="line">  <span class="built_in">console</span>.log(<span class="string">"===aws cloud watch log==="</span>);</div><div class="line">  zlib.gunzip(payload, <span class="function"><span class="keyword">function</span>(<span class="params">e, result</span>) </span>&#123;</div><div class="line">    <span class="keyword">if</span> (e) &#123;</div><div class="line">      ctx.fail(e);</div><div class="line">    &#125; <span class="keyword">else</span> &#123;</div><div class="line">      <span class="keyword">let</span> data = <span class="built_in">JSON</span>.parse(result.toString(<span class="string">'ascii'</span>));</div><div class="line">      excuteReportMessage(data).then(<span class="function"><span class="keyword">function</span>(<span class="params"></span>) </span>&#123;</div><div class="line">        ctx.succeed(&#123;</div><div class="line">          <span class="attr">result</span>: <span class="string">'success'</span></div><div class="line">        &#125;);</div><div class="line">      &#125;).catch(<span class="function"><span class="keyword">function</span>(<span class="params">err</span>) </span>&#123;</div><div class="line">        ctx.fail(err);</div><div class="line">      &#125;);</div><div class="line">    &#125;</div><div class="line">  &#125;);</div><div class="line">&#125;</div><div class="line"></div><div class="line">exports.handle = <span class="function"><span class="keyword">function</span>(<span class="params">input, ctx</span>) </span>&#123;</div><div class="line">  <span class="keyword">if</span> (input.awslogs &amp;&amp; input.awslogs.data) &#123;</div><div class="line">    reportCWLError(input, ctx);</div><div class="line">  &#125; <span class="keyword">else</span> &#123;</div><div class="line">    ctx.fail(<span class="string">"no aws log"</span>);</div><div class="line">  &#125;</div><div class="line">&#125;</div></pre></td></tr></table></figure>
+<h2 id="訂閱-Lambda-CWL-的-Terraform-程式碼"><a href="#訂閱-Lambda-CWL-的-Terraform-程式碼" class="headerlink" title="訂閱 Lambda CWL 的 Terraform 程式碼"></a>訂閱 Lambda CWL 的 Terraform 程式碼</h2><figure class="highlight go"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div></pre></td><td class="code"><pre><div class="line">resource <span class="string">"aws_lambda_permission"</span> <span class="string">"allow_report_error_access_my_awesome_lambda_cwl"</span> &#123;</div><div class="line">    statement_id = <span class="string">"AllowExecutionFromCWL2"</span></div><div class="line">    action = <span class="string">"lambda:InvokeFunction"</span></div><div class="line">    function_name = <span class="string">"arn:aws:lambda:ap-northeast-1:12345678:function:report_error"</span></div><div class="line">    principal = <span class="string">"logs.ap-northeast-1.amazonaws.com"</span></div><div class="line">    source_arn = <span class="string">"arn:aws:logs:ap-northeast-1:12345678:log-group:/aws/lambda/my_awesome_lambda:*"</span></div><div class="line">    source_account = <span class="string">"12345678"</span></div><div class="line">&#125;</div><div class="line"></div><div class="line">resource <span class="string">"aws_cloudwatch_log_subscription_filter"</span> <span class="string">"allow_report_error_access_my_awesome_lambda_cwl"</span> &#123;</div><div class="line">  name = <span class="string">"allow_report_error_access_my_awesome_lambda_cwl"</span></div><div class="line">  log_group_name = <span class="string">"/aws/lambda/my_awesome_lambda"</span></div><div class="line">  filter_pattern = <span class="string">""</span></div><div class="line">  destination_arn = <span class="string">"arn:aws:lambda:ap-northeast-1:12345678:function:report_error"</span></div><div class="line">  depends_on = [<span class="string">"aws_lambda_permission.allow_report_error_access_my_awesome_lambda_cwl"</span>]</div><div class="line">&#125;</div></pre></td></tr></table></figure>
+<h2 id="References"><a href="#References" class="headerlink" title="References"></a>References</h2><ul>
+<li><a href="http://docs.aws.amazon.com/lambda/latest/dg/nodejs-prog-model-handler.html" target="_blank" rel="external">Lambda Function Handler (Node.js)</a></li>
+</ul>
+
+  </section>
+</article>
+
+  <div class="sharing grid">
+  <section class="profile grid-item grid">
+    <img class="avatar" src="https://www.gravatar.com/avatar/a7da45a4a1667717721e9a81d66845ff" alt="avatar" />
+    <div class="grid-item">
+      <p class="title"> ocowchun </p>
+      <p class="subtitle"> yoyoyo </p>
+    <div>
+  </section>
+
+  <section class="share-btns">
+    <!-- <p> share it if you like it~ </p> -->
+    <a
+  class="twitter-share-button"
+  data-size="large"
+  data-via="ocowchun"
+  href="https://twitter.com/intent/tweet?text=<a href="https://aws"
+>
+  Tweet
+</a>
+
+<script>
+  window.twttr = (function(d, s, id) {
+  var js, fjs = d.getElementsByTagName(s)[0],
+    t = window.twttr || {};
+  if (d.getElementById(id)) return t;
+  js = d.createElement(s);
+  js.id = id;
+  js.src = "https://platform.twitter.com/widgets.js";
+  js.async = true;
+  fjs.parentNode.insertBefore(js, fjs);
+
+  t._e = [];
+  t.ready = function(f) {
+    t._e.push(f);
+  };
+
+  return t;
+}(document, "script", "twitter-wjs"));
+</script>
+
+  </section>
+</div>
+
+
+  
+    
+<section class="article-comment">
+  <div id="disqus_thread">
+    <noscript>Please enable JavaScript to view the <a href="//disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+  </div>
+</section>
+
+<script>
+  var disqus_shortname = 'ocowchun';
+  
+  var disqus_url = 'https://blog.ocowchun.com/2016/08/13/how-to-track-aws-lambda-error/';
+  
+  (function(){
+    var dsq = document.createElement('script');
+    dsq.type = 'text/javascript';
+    dsq.async = true;
+    dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+    (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+  })();
+</script>
+
+
+  
+</main>
+
+
+<script>
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-78480228-1', 'auto');
+  ga('send', 'pageview');
+
+</script>
+</body>
+</html>
