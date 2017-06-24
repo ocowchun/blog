@@ -27,5 +27,9 @@
     "hexo-renderer-sass": "^0.2.0",
     "hexo-renderer-stylus": "^0.3.1",
     "hexo-server": "^0.2.0"
+  },
+  "devDependencies": {
+    "readdirp": "^2.1.0",
+    "s3-sync": "^1.0.1"
   }
 }
