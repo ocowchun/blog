@@ -6,7 +6,9 @@
     "new_post": "hexo new",
     "generate": "hexo generate",
     "deploy": "hexo deploy --generate",
-    "start": "hexo server --draft"
+    "start": "hexo server",
+    "start:draft": "hexo server --draft"
+
   },
   "hexo": {
     "version": "3.2.2"

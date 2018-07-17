@@ -1,10 +1,12 @@
 ---
-title: transaction_and_rails
+title: Transaction Isolation Level
 tags:
   - database
   - transaction
   - rails
+date: 2018-07-17 21:34:17
 ---
+
 
 > Transaction Isolation Level 是 DB 幫我們封裝 concurrency 操作的一個介面，讓我們只需要指定 Isolation Level 就可以達到資料變動粒度的要求。
 
@@ -36,36 +38,33 @@ Isolation Level 代表當你的 Transaction 在執行時，要如何與其他同
 ### When to use Repeatable reads
 付款時我們希望可以避免重複付款的情形發生，這時候可以用 Repeatable reads 來達成，概念上就是幫 payment 上鎖，確保單一時間只能有一個 transaction 做付款的動作
 
-tx1(Repeatable reads): find payemt(id=123) and set payment.processing = true
-
-tx2: find payemt(id=123) and set payment.processing = true ，因為 tx1 設定了 Repeatable reads 在 tx1 完成錢，其他 transaction 都不可以修改 payemt(id=123)，因此 Transaction rollback
+* tx1(Repeatable reads): find payemt(id=123) and set payment.processing = true
+* tx2: find payemt(id=123) and set payment.processing = true ，因為 tx1 設定了 Repeatable reads 在 tx1 完成錢，其他 transaction 都不可以修改 payemt(id=123)，因此 Transaction rollback
 
 ### When to use Serializable
 經典的例子是會議室行程，會議室上的行程不可以有時間重疊的會議(i.e., 3/17 15:00~18:00 與 3/17 14:00~16:00)
 
 當我要新增會議時，如果使用 Repeatable reads 或是更寬鬆的 Isolation Level:
-tx1(Repeatable reads): return 0 records when run `select count(1) from events where (start_time > 1500 and start_time < 1800) or (end_time > 1500 and end_time < 1800)`
-tx2(Repeatable reads): return 0 records when run `select count(1) from events where (start_time > 1400 and start_time < 1600) or (end_time > 1400 and end_time < 1600)`
-tx1: insert events (1500,1800)
-tx2: insert events (1400,1600)
-tx1: complete
-tx2: complete
+* tx1(Repeatable reads): return 0 records when run `select count(1) from events where (start_time > 1500 and start_time < 1800) or (end_time > 1500 and end_time < 1800)`
+* tx2(Repeatable reads): return 0 records when run `select count(1) from events where (start_time > 1400 and start_time < 1600) or (end_time > 1400 and end_time < 1600)`
+* tx1: insert events (1500,1800)
+* tx2: insert events (1400,1600)
+* tx1: complete
+* tx2: complete
 
 兩個 Transaction 執行時沒有任何違反 Isolation Level 的情況，所以都順利執行，最後產生錯誤的結果。
 
 如果使用 Serializable
-tx1(Serializable): return 0 records when run `select count(1) from events where (start_time > 1500 and start_time < 1800) or (end_time > 1500 and end_time < 1800)`
-tx2(Serializable): return 0 records when run `select count(1) from events where (start_time > 1400 and start_time < 1600) or (end_time > 1400 and end_time < 1600)`
-tx1: insert events (1500,1800)
-tx2: Transaction rollback, 因為有符合 query 的新 event(1500,1800) 被新增，就算 tx1 還沒有 commit
+* tx1(Serializable): return 0 records when run `select count(1) from events where (start_time > 1500 and start_time < 1800) or (end_time > 1500 and end_time < 1800)`
+* tx2(Serializable): return 0 records when run `select count(1) from events where (start_time > 1400 and start_time < 1600) or (end_time > 1400 and end_time < 1600)`
+* tx1: insert events (1500,1800)
+* tx2: Transaction rollback, 因為有符合 query 的新 event(1500,1800) 被新增，就算 tx1 還沒有 commit
 
-Serializable 會確保 `同一時間只能有一個 Transaction 對某個集合的資料作修改`
+Serializable 會確保`同一時間只能有一個 Transaction 對某個集合的資料作修改`。
 
 ## Transaction in Rails
 
-Rails 裡面我們可以透過 `transaction` 將多個 db 操作包在同一個 Transaction 裡面
-
-比方說，我們希望同一時間只能有一個 Transaction 對 order 做 update 的動作
+Rails 裡面我們可以透過 `transaction` 將多個 db 操作包在同一個 Transaction 裡面。比方說，我們希望同一時間只能有一個 Transaction 對 order 做 update 的動作
 
 ```rb
 Order.transaction do
@@ -74,10 +73,7 @@ Order.transaction do
 end
 ```
 
-光是看上面的 code 可能會認為 id = 1 的 order 在同一個時間內只會只會有一個 Transaction 可以修改
-id = 1 的 order，其實這樣的想法不見得是對的，這還要看你使用的 database 預設的 isolation level
-比如說在 pg 裡面預設的 `read_committed`, 所以上面的寫法沒有辦法保證說同一時間只會有一個 transaction 對
-id = 1 的 order 做操作。
+光是看上面的 code 可能會認為 id = 1 的 order 在同一個時間內只會只會有一個 Transaction 可以修改 id = 1 的 order，其實這樣的想法不見得是對的，這還要看你使用的 database 預設的 Isolation Level 比如說在 PostgreSQL 裡面預設的 Isolation Level 是 `read_committed`, 所以上面的寫法沒有辦法保證說同一時間只會有一個 transaction 對 id = 1 的 order 做修改。
 
 想要真正做到其他 Transaction 不能對 id = 1 的 order 做修改的話，可以在 `transaction` 指定 Isolation Level 來達成
 
@@ -88,8 +84,7 @@ Order.transaction(isolation: :repeatable_read) do
 end
 ```
 
-這樣就會讓 db 限制同一時間所有執行的 Transaction 裡只有一個 Transaction 可以更新 id = 1 的 order
-要記得把查詢 order 的 code，也放在 `transaction` block 裡面，否則 db 就沒有辦法知道!
+這樣就會讓 db 限制同一時間所有執行的 Transaction 裡只有一個 Transaction 可以更新 id = 1 的 order，要記得把查詢 order 的 code，也放在 `transaction` block 裡面，否則 db 就沒有辦法知道!
 
 ```rb
 # below code, order can be update more than one time in concurrent tranactions
@@ -108,10 +103,9 @@ ActiveRecord::TransactionIsolationError: cannot set transaction isolation in a n
 
 ### 測試失敗的原因
 rspec 預設會啟用 transactional_fixtures 來加速 example 之間清理資料的速度，所以你的測試最外面會包一個 transaction，可是這樣就會變成 nested transaction，目前 nested transaction 還不支援指定 Isolation Level。
-DatabaseCleaner 也會做類似的事情。解法是先把 transactional_fixtures 關掉，一律用 DatabaseCleaner 來管理清理資料的工作，然後當你的測試案例有需要指定 Isolation Level 的時候，調整清理資料的策略，改為使用 `deletion`。
+[DatabaseCleaner](https://github.com/DatabaseCleaner/database_cleaner) 也會做類似的事情。解法是先把 transactional_fixtures 關掉，一律用 DatabaseCleaner 來管理清理資料的工作，然後當你的測試案例有需要指定 Isolation Level 的時候，調整清理資料的策略，改為使用 `deletion`。
 
-----
-
+`spec_helper.rb`
 ```rb
   config.use_transactional_fixtures = false
   config.around(:each) do |example|
@@ -127,6 +121,7 @@ DatabaseCleaner 也會做類似的事情。解法是先把 transactional_fixture
   end
 ```
 
+`my_method_spec.rb`
 ```rb
   describe '#method_to_test', db_cleaner_strategy: :deletion do
     it "should work" do
