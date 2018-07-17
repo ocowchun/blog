@@ -5,7 +5,7 @@
   "scripts": {
     "new_post": "hexo new",
     "generate": "hexo generate",
-    "deploy": "hexo deploy --generate",
+    "deploy": "node deploy.js",
     "start": "hexo server",
     "start:draft": "hexo server --draft"
 
