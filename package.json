@@ -7,7 +7,8 @@
     "generate": "hexo generate",
     "deploy": "node deploy.js",
     "start": "hexo server",
-    "start:draft": "hexo server --draft"
+    "start:draft": "hexo server --draft",
+    "publish_post": "hexo publish"
 
   },
   "hexo": {
