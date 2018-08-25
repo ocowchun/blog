@@ -1,5 +1,6 @@
 ---
 title: Transaction Isolation Level
+description: Database 的 Transaction Isolation Level 來改善 data consistency
 tags:
   - database
   - transaction

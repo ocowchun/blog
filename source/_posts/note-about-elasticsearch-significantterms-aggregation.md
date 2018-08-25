@@ -3,6 +3,7 @@ title: '[筆記] Elasticsearch Significant Terms Aggregation'
 tags:
   - Elasticsearch
 date: 2018-08-25 18:27:04
+description: 'Elasticsearch 兩種看起來相似的 Aggregation: Terms 跟 Significant Terms 的差異。'
 ---
 
 使用 Kibana 的時候發現兩種看起來相似的 Aggregation: Terms 跟 Significant Terms，兩者會有不同的效果。

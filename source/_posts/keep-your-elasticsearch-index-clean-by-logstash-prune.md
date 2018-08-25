@@ -4,6 +4,7 @@ tags:
   - Elasticsearch
   - Logstash
 date: 2018-08-22 23:13:49
+description: 'Logstash Prune filter plugin 可以讓你的 Elasticsearch Index Mapping 變乾淨'
 ---
 
 
